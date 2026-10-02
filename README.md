@@ -34,13 +34,13 @@ Windows, from this computer:
 npm run dist:win
 ```
 
-The app is written to `release/MeetLocal-1.0.0-windows-x64.exe`.
+The app is written to `release/MeetLocal-1.0.1-windows-x64.exe`.
 
-Mac and Linux builds are produced on GitHub when you push a version tag:
+Mac and Linux builds are produced on GitHub when you push a version tag. The tag has to match `version` in `package.json`.
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 The Release workflow builds:

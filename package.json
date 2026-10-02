@@ -1,6 +1,6 @@
 {
   "name": "meetlocal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Host a voice, video, and screen-sharing meeting from your own computer.",
   "main": "dist-electron/main.cjs",
@@ -13,8 +13,8 @@
     "build": "npm run icon && npm run typecheck && npm run build:renderer && npm run build:electron",
     "dev": "npm run build:electron && cross-env MEETLOCAL_DEV=1 electron .",
     "start": "electron .",
-    "dist": "npm run build && electron-builder --config electron-builder.yml",
-    "dist:win": "npm run build && electron-builder --win portable --config electron-builder.yml",
+    "dist": "npm run build && electron-builder --publish never --config electron-builder.yml",
+    "dist:win": "npm run build && electron-builder --win portable --publish never --config electron-builder.yml",
     "test": "vitest run",
     "e2e": "playwright test"
   },

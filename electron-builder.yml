@@ -45,4 +45,4 @@ linux:
     - target: AppImage
       arch:
         - x64
-  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+  artifactName: ${productName}-${version}-linux-x64.${ext}

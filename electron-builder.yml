@@ -1,0 +1,48 @@
+appId: com.meetlocal.app
+productName: MeetLocal
+copyright: Copyright © 2026 MeetLocal
+asar: true
+npmRebuild: false
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - resources/icon.png
+  - package.json
+  - node_modules/**/*
+  - "!node_modules/.cache/**"
+  - "!**/*.map"
+  - "!src/**"
+  - "!electron/**"
+  - "!tests/**"
+  - "!e2e/**"
+  - "!release/**"
+  - "!playwright-report/**"
+  - "!test-results/**"
+win:
+  icon: resources/icon.png
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-windows-${arch}.${ext}
+mac:
+  icon: resources/icon.png
+  category: public.app-category.video
+  identity: null
+  target:
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+linux:
+  icon: resources/icon.png
+  category: Network
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}

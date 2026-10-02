@@ -82,10 +82,10 @@ async function createWindow() {
   })
 
   mainWindow = new BrowserWindow({
-    width: 460,
-    height: 720,
-    minWidth: 400,
-    minHeight: 560,
+    width: 360,
+    height: 520,
+    minWidth: 320,
+    minHeight: 430,
     title: 'MeetLocal',
     backgroundColor: '#f3efe6',
     autoHideMenuBar: true,
@@ -146,6 +146,18 @@ ipcMain.handle('host:open', async (_event, payload: { meetingId?: string; hostSe
   const hostSecret = typeof payload?.hostSecret === 'string' ? payload.hostSecret : ''
   const url = openHostBrowser(meetingId, hostSecret)
   await shell.openExternal(url)
+})
+
+ipcMain.handle('shell:open', async (_event, pageUrl: string) => {
+  if (typeof pageUrl !== 'string' || pageUrl.length > 2000) throw new Error('That link is not valid.')
+  let parsed: URL
+  try {
+    parsed = new URL(pageUrl)
+  } catch {
+    throw new Error('That link is not valid.')
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('That link is not valid.')
+  await shell.openExternal(parsed.toString())
 })
 
 ipcMain.handle('updates:check', () => checkForUpdate())

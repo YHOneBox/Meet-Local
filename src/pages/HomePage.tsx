@@ -29,6 +29,7 @@ export function HomePage() {
   const [busy, setBusy] = useState(false)
   const [joinInput, setJoinInput] = useState('')
   const [joinError, setJoinError] = useState('')
+  const [joinAsk, setJoinAsk] = useState(false)
   const [copied, setCopied] = useState('')
   const [resume, setResume] = useState(false)
   const [browserNote, setBrowserNote] = useState('')
@@ -193,7 +194,26 @@ export function HomePage() {
   function joinExisting() {
     const parsed = parseMeetingLink(joinInput, window.location.origin)
     if (!parsed) {
+      setJoinAsk(false)
       setJoinError('Paste a full MeetLocal link.')
+      return
+    }
+    setJoinError('')
+    setJoinAsk(true)
+  }
+
+  function confirmJoin(where: 'here' | 'web') {
+    const parsed = parseMeetingLink(joinInput, window.location.origin)
+    if (!parsed) {
+      setJoinError('Paste a full MeetLocal link.')
+      return
+    }
+    if (where === 'web') {
+      const typed = joinInput.trim()
+      const path = parsed.tempToken ? `/t/${parsed.tempToken}` : `/m/${parsed.meetingId}`
+      const url = /^https?:\/\//i.test(typed) ? typed : `${parsed.httpBase}${path}`
+      if (window.meetlocal?.openLink) void window.meetlocal.openLink(url)
+      else window.open(url, '_blank', 'noopener,noreferrer')
       return
     }
     saveJoinTarget(parsed)
@@ -223,7 +243,7 @@ export function HomePage() {
     <div className="shell home">
       <header className="topbar">
         <div className="brand">
-          <img className="brand-logo" src="/logo.png" alt="MeetLocal" width="132" height="88" />
+          <img className="brand-logo" src="/logo.png" alt="MeetLocal" width="120" height="80" />
         </div>
         {!created && view !== 'settings' && (
           <button className="btn ghost" type="button" data-testid="open-settings" onClick={() => setView('settings')}>
@@ -276,25 +296,39 @@ export function HomePage() {
                     onChange={(event) => {
                       setJoinInput(event.target.value)
                       setJoinError('')
+                      setJoinAsk(false)
                     }}
                   />
                 </label>
                 {joinError && <p className="error">{joinError}</p>}
-                <button className="btn primary wide" type="submit" data-testid="join-continue">
-                  Continue
-                </button>
+                {joinAsk ? (
+                  <div className="join-ask" data-testid="join-choice">
+                    <p className="hint">Join in this window, or open the meeting in your browser?</p>
+                    <button className="btn wide" type="button" data-testid="join-here" onClick={() => confirmJoin('here')}>
+                      Join here
+                    </button>
+                    <button className="btn primary wide" type="button" data-testid="join-browser" onClick={() => confirmJoin('web')}>
+                      Open in browser
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn primary wide" type="submit" data-testid="join-continue">
+                    Continue
+                  </button>
+                )}
               </form>
             )}
           </>
         ) : null}
         {!created && view === 'create' && canHost && (
             <form
-              className="panel"
+              className="panel create-form"
               onSubmit={(event) => {
                 event.preventDefault()
                 void onCreate()
               }}
             >
+              <div className="create-scroll">
               <button className="text-back" type="button" data-testid="home-back" onClick={() => setView('home')}>
                 Back
               </button>
@@ -370,7 +404,7 @@ export function HomePage() {
                 <div className="field">
                   <span>Share over</span>
                   {interfaces.length === 0 && <p className="hint">No LAN or VPN address was found. You can still open the meeting on this computer.</p>}
-                  <div className="choices">
+                  <div className="choices choice-scroll">
                     {interfaces.map((item) => (
                       <label key={`${item.name}-${item.address}`} className={address === item.address ? 'choice active' : 'choice'}>
                         <input
@@ -404,6 +438,7 @@ export function HomePage() {
               </label>
                 </>
               )}
+              </div>
               {error && <p className="error">{error}</p>}
               <button className="btn primary wide" type="submit" disabled={busy || (usePassword && password.length < 8)} data-testid="create-meeting">
                 {busy ? (linkMode === 'temp' ? 'Creating address…' : 'Creating…') : 'Create meeting'}
@@ -517,13 +552,26 @@ export function HomePage() {
                   onChange={(event) => {
                     setJoinInput(event.target.value)
                     setJoinError('')
+                    setJoinAsk(false)
                   }}
                 />
               </label>
               {joinError && <p className="error">{joinError}</p>}
-              <button className="btn primary wide" type="submit" data-testid="join-continue">
-                Continue
-              </button>
+              {joinAsk ? (
+                <div className="join-ask" data-testid="join-choice">
+                  <p className="hint">Join in this window, or open the meeting in your browser?</p>
+                  <button className="btn wide" type="button" data-testid="join-here" onClick={() => confirmJoin('here')}>
+                    Join here
+                  </button>
+                  <button className="btn primary wide" type="button" data-testid="join-browser" onClick={() => confirmJoin('web')}>
+                    Open in browser
+                  </button>
+                </div>
+              ) : (
+                <button className="btn primary wide" type="submit" data-testid="join-continue">
+                  Continue
+                </button>
+              )}
             </form>
           )}
           {!created && view === 'settings' && (

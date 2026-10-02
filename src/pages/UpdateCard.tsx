@@ -94,6 +94,21 @@ export function UpdateCard() {
 
   if (!desktop?.checkForUpdate) return null
 
+  async function scan() {
+    if (!desktop?.checkForUpdate) return
+    setBusy(true)
+    setError('')
+    try {
+      const next = await desktop.checkForUpdate()
+      setInfo(next)
+      setDismissed(false)
+    } catch {
+      setError('Could not check for updates.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function download() {
     setBusy(true)
     setError('')
@@ -171,6 +186,9 @@ export function UpdateCard() {
           )}
           {info?.message && <span className="fine">{info.message}</span>}
           {error && <span className="fine">{error}</span>}
+          <button type="button" data-testid="update-check" onClick={() => void scan()} disabled={busy}>
+            {busy ? 'Checking…' : 'Check for updates'}
+          </button>
         </div>
       )}
       {notesFor && (

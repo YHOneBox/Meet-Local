@@ -14,7 +14,7 @@ MeetLocal is a portable meeting app for Windows, Mac, and Linux. One person host
 - Switch microphone, camera, and speaker, and lower video quality if the connection is tight.
 - Choose a font size, a meeting style, and the defaults for microphone, camera, layout, and the waiting room. Those choices are on the Settings page.
 
-The MeetLocal window hosts the call. When you open the meeting, it starts in your browser. Keep the MeetLocal window open until the call is over. The browser link that opens the host controls is a one-time address on this computer, and it is not the link you share.
+The MeetLocal window hosts the call. Opening a meeting you created starts it in your browser. Joining someone else’s link asks whether to stay in this window or open the browser. Keep the MeetLocal window open until the call is over. The browser link that opens the host controls is a one-time address on this computer, and it is not the link you share.
 
 People have to be able to reach the address you share. A VPN link works for people on that VPN. A local-network link works for people on the same LAN. MeetLocal does not relay the call through a cloud service.
 
@@ -37,13 +37,13 @@ Windows, from this computer:
 npm run dist:win
 ```
 
-The app is written to `release/MeetLocal-1.2.0-windows-x64.exe`.
+The app is written to `release/MeetLocal-1.3.0-windows-x64.exe`.
 
-Mac and Linux builds are produced on GitHub when you push a version tag. The workflow sets the app version from that tag before it builds, so the file name matches the tag. `v1.2.0` produces `MeetLocal-1.2.0-...`.
+Mac and Linux builds are produced on GitHub when you push a version tag. The workflow sets the app version from that tag before it builds, so the file name matches the tag. `v1.3.0` produces `MeetLocal-1.3.0-...`.
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 The Release workflow builds:
@@ -56,7 +56,7 @@ Those files are attached to the GitHub release for that tag. The builds are unsi
 
 ## Updates
 
-The desktop app checks [GitHub releases](https://github.com/YHOneBox/Meet-Local/releases) every time it opens. If a newer version is published, MeetLocal asks whether to update and shows the release notes. Choosing **Not now** hides that question until the next time you open the app. The download keeps the version in its name, for example `MeetLocal-1.3.0-windows-x64.exe`, and sits next to the current app. Opening it starts that version. The copy you are using stays in place. The same notes stay available from **What’s new** after you update.
+The desktop app checks [GitHub releases](https://github.com/YHOneBox/Meet-Local/releases) every time it opens. If a newer version is published, MeetLocal asks whether to update and shows the release notes. Choosing **Not now** hides that question until the next time you open the app. **Check for updates** on the home page runs that scan again. The download keeps the version in its name, for example `MeetLocal-1.4.0-windows-x64.exe`, and sits next to the current app. Opening it starts that version. The copy you are using stays in place. The same notes stay available from **What’s new** after you update.
 
 ## Data on this computer
 

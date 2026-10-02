@@ -36,6 +36,7 @@ export type MeetLocalApi = {
   inspectCertificate: (pageUrl: string) => Promise<{ host: string; fingerprint: string; trusted: boolean }>
   trustCertificate: (host: string, fingerprint: string) => Promise<void>
   openHostedMeeting: (meetingId: string, hostSecret: string) => Promise<void>
+  openLink: (pageUrl: string) => Promise<void>
   onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void
 }
 

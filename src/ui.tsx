@@ -29,6 +29,7 @@ export function MediaView({
   speakerId = '',
   version = 0,
   recordLabel,
+  fit = 'cover',
 }: {
   stream: MediaStream | null
   muted?: boolean
@@ -36,6 +37,7 @@ export function MediaView({
   speakerId?: string
   version?: number
   recordLabel?: string
+  fit?: 'cover' | 'contain'
 }) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => {
@@ -46,10 +48,11 @@ export function MediaView({
     const sink = element as HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }
     if (speakerId && sink.setSinkId) void sink.setSinkId(speakerId).catch(() => undefined)
   }, [stream, speakerId, version])
+  const className = [mirror ? 'mirror' : '', fit === 'contain' ? 'fit-contain' : ''].filter(Boolean).join(' ')
   return (
     <video
       ref={ref}
-      className={mirror ? 'mirror' : undefined}
+      className={className || undefined}
       autoPlay
       playsInline
       muted={muted}

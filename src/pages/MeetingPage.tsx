@@ -41,6 +41,15 @@ export function MeetingPage() {
   const seenChat = useRef(0)
 
   useEffect(() => {
+    const load = () => {
+      void navigator.mediaDevices?.enumerateDevices().then(setDevices).catch(() => undefined)
+    }
+    load()
+    navigator.mediaDevices?.addEventListener('devicechange', load)
+    return () => navigator.mediaDevices?.removeEventListener('devicechange', load)
+  }, [])
+
+  useEffect(() => {
     if (!handoff) {
       const target = readJoinTarget()
       if (target?.tempToken && target.httpBase === window.location.origin) navigate(`/t/${target.tempToken}`, { replace: true })
@@ -343,9 +352,9 @@ export function MeetingPage() {
             <>
               <div className="stage" data-testid="screen-stage" data-screen="true">
                 {localSharing ? (
-                  <MediaView stream={session.screenStream} muted recordLabel="Your screen" />
+                  <MediaView stream={session.screenStream} muted fit="contain" recordLabel="Your screen" />
                 ) : sharer ? (
-                  <MediaView stream={sharer.screen} version={sharer.mediaVersion} recordLabel={`${sharer.info.name} screen`} speakerId={prefs.speakerId} />
+                  <MediaView stream={sharer.screen} version={sharer.mediaVersion} fit="contain" recordLabel={`${sharer.info.name} screen`} speakerId={prefs.speakerId} />
                 ) : null}
                 <span className="namebar">{localSharing ? 'Your screen' : `${sharer?.info.name ?? 'Guest'} is presenting`}</span>
               </div>
@@ -465,14 +474,30 @@ export function MeetingPage() {
         ))}
       </div>
       <footer className="controls">
-        <button className={session.micOn ? 'ctrl' : 'ctrl off'} type="button" data-testid="control-mic" onClick={() => void session.setMic(!session.micOn)} aria-label={session.micOn ? 'Mute microphone' : 'Unmute microphone'}>
-          <Icon name={session.micOn ? 'mic' : 'mic-off'} />
-          <span>{session.micOn ? 'Mute' : 'Unmute'}</span>
-        </button>
-        <button className={session.camOn ? 'ctrl' : 'ctrl off'} type="button" data-testid="control-cam" onClick={() => void toggleCam()} aria-label={session.camOn ? 'Turn camera off' : 'Turn camera on'}>
-          <Icon name={session.camOn ? 'cam' : 'cam-off'} />
-          <span>{session.camOn ? 'Stop video' : 'Start video'}</span>
-        </button>
+        <div className="ctrl-stack">
+          <select className="device-mini" data-testid="dock-mic" aria-label="Microphone" value={prefs.micId} onChange={(event) => void changeDevice('mic', event.target.value)}>
+            <option value="">Microphone</option>
+            {devices.filter((device) => device.kind === 'audioinput').map((device) => (
+              <option key={device.deviceId} value={device.deviceId}>{device.label || 'Microphone'}</option>
+            ))}
+          </select>
+          <button className={session.micOn ? 'ctrl' : 'ctrl off'} type="button" data-testid="control-mic" onClick={() => void session.setMic(!session.micOn)} aria-label={session.micOn ? 'Mute microphone' : 'Unmute microphone'}>
+            <Icon name={session.micOn ? 'mic' : 'mic-off'} />
+            <span>{session.micOn ? 'Mute' : 'Unmute'}</span>
+          </button>
+        </div>
+        <div className="ctrl-stack">
+          <select className="device-mini" data-testid="dock-cam" aria-label="Camera" value={prefs.camId} onChange={(event) => void changeDevice('cam', event.target.value)}>
+            <option value="">Camera</option>
+            {devices.filter((device) => device.kind === 'videoinput').map((device) => (
+              <option key={device.deviceId} value={device.deviceId}>{device.label || 'Camera'}</option>
+            ))}
+          </select>
+          <button className={session.camOn ? 'ctrl' : 'ctrl off'} type="button" data-testid="control-cam" onClick={() => void toggleCam()} aria-label={session.camOn ? 'Turn camera off' : 'Turn camera on'}>
+            <Icon name={session.camOn ? 'cam' : 'cam-off'} />
+            <span>{session.camOn ? 'Stop video' : 'Start video'}</span>
+          </button>
+        </div>
         <div className="share-anchor">
           <button className={localSharing ? 'ctrl on' : 'ctrl'} type="button" data-testid="control-share" onClick={() => void beginShare()}>
             <Icon name="screen" />

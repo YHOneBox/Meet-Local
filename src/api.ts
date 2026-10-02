@@ -113,6 +113,7 @@ export function errorCopy(code: string): string {
     full: 'This meeting is full (8 people).',
     name: 'Enter your name to join.',
     'host-only': 'Only this computer can host a meeting.',
+    'weak-password': 'Use at least 8 characters, or generate a password.',
     forbidden: 'That action is reserved for the host.',
   }
   return copy[code] || 'Something went wrong. Try again.'

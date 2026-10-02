@@ -302,7 +302,9 @@ export function MeetingPage() {
               Rec {formatClock(now - recordFrom)}
             </span>
           )}
-          <span className="pill subtle">{session.meeting?.allowStun ? 'Peer to peer' : 'Direct only'}</span>
+          <span className="pill subtle" title="Audio and video are encrypted between the people in the call.">
+            Encrypted
+          </span>
           <span className="pill subtle">{peopleCount} in the call</span>
         </div>
       </header>

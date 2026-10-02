@@ -26,6 +26,7 @@ export function LobbyPage() {
   const [level, setLevel] = useState(0)
   const [joining, setJoining] = useState(false)
   const [mediaReady, setMediaReady] = useState(false)
+  const [pendingTrust, setPendingTrust] = useState<{ host: string; fingerprint: string; next: string } | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
@@ -33,14 +34,43 @@ export function LobbyPage() {
       setLoadError('This meeting link is not valid.')
       return
     }
+    let cancel = false
+    const remoteHost = new URL(target.httpBase).host
+    if (remoteHost !== window.location.host) {
+      const path = target.tempToken ? `/t/${target.tempToken}` : `/m/${target.meetingId}`
+      const next = `${target.httpBase}${path}`
+      if (!window.meetlocal?.inspectCertificate) {
+        window.location.assign(next)
+        return
+      }
+      window.meetlocal
+        .inspectCertificate(target.httpBase)
+        .then((report) => {
+          if (cancel) return
+          if (report.trusted) window.location.assign(next)
+          else setPendingTrust({ host: report.host, fingerprint: report.fingerprint, next })
+        })
+        .catch((error: Error) => {
+          if (!cancel) setLoadError(error.message)
+        })
+      return () => {
+        cancel = true
+      }
+    }
     saveJoinTarget(target)
     const secret = host ? readHost()?.hostSecret : undefined
     getMeetingInfo(target.httpBase, target, secret)
       .then((meeting) => {
+        if (cancel) return
         setInfo(meeting)
         document.title = `${meeting.title} · MeetLocal`
       })
-      .catch((error: Error) => setLoadError(errorCopy(error.message)))
+      .catch((error: Error) => {
+        if (!cancel) setLoadError(errorCopy(error.message))
+      })
+    return () => {
+      cancel = true
+    }
   }, [target, host])
 
   useEffect(() => {
@@ -140,6 +170,38 @@ export function LobbyPage() {
     })
     setJoining(true)
     navigate('/room')
+  }
+
+  if (pendingTrust) {
+    return (
+      <div className="shell narrow">
+        <div className="panel">
+          <p className="kicker">Encrypted link</p>
+          <h2>Compare this fingerprint</h2>
+          <p className="hint">Ask the host to read the fingerprint from their MeetLocal window. Continue only when the two match.</p>
+          <p className="mono block" data-testid="trust-fingerprint">
+            {pendingTrust.fingerprint}
+          </p>
+          <div className="modal-actions">
+            <button className="btn ghost" type="button" onClick={() => navigate('/')}>
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              type="button"
+              data-testid="trust-confirm"
+              onClick={() => {
+                void window.meetlocal?.trustCertificate(pendingTrust.host, pendingTrust.fingerprint).then(() => {
+                  window.location.assign(pendingTrust.next)
+                })
+              }}
+            >
+              Fingerprints match
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (loadError) {
@@ -263,7 +325,7 @@ export function LobbyPage() {
             </label>
           )}
           <p className="fine">
-            Certificate <span className="mono">{info.fingerprint}</span>
+            Voice and video are encrypted. Compare this certificate with the host: <span className="mono">{info.fingerprint}</span>
           </p>
           <button className="btn primary wide" type="submit" disabled={joining || !mediaReady || name.trim().length === 0 || (needsPassword && password.length === 0)} data-testid="prejoin-join">
             {joining ? 'Joining…' : 'Join meeting'}

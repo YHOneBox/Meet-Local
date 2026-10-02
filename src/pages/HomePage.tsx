@@ -16,7 +16,7 @@ export function HomePage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [waitingRoom, setWaitingRoom] = useState(false)
-  const [allowStun, setAllowStun] = useState(true)
+  const [allowStun, setAllowStun] = useState(false)
   const [linkMode, setLinkMode] = useState<'network' | 'temp'>('network')
   const [address, setAddress] = useState('')
   const [created, setCreated] = useState<CreatedView | null>(null)
@@ -207,7 +207,7 @@ export function HomePage() {
             Start a call from this device, then hand someone a VPN address or a temporary link. Audio and video travel directly between the people in the call.
           </p>
           <ul className="facts">
-            <li>Optional password, or a complex one generated for you.</li>
+            <li>Voice and video are encrypted between the people in the call.</li>
             <li>Share a whole screen or a single window.</li>
             <li>The temporary link stops working when the meeting ends.</li>
           </ul>
@@ -326,10 +326,10 @@ export function HomePage() {
               </label>
               <label className="check">
                 <input type="checkbox" checked={allowStun} onChange={(event) => setAllowStun(event.target.checked)} data-testid="allow-stun" />
-                Use STUN if two devices cannot see each other directly. Media is still peer to peer.
+                Help devices find each other with STUN. This does not carry audio or video, and it is off unless you turn it on.
               </label>
               {error && <p className="error">{error}</p>}
-              <button className="btn primary wide" type="submit" disabled={busy || (usePassword && password.length < 4)} data-testid="create-meeting">
+              <button className="btn primary wide" type="submit" disabled={busy || (usePassword && password.length < 8)} data-testid="create-meeting">
                 {busy ? 'Creating…' : 'Create meeting'}
               </button>
             </form>

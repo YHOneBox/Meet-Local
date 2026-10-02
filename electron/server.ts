@@ -1,4 +1,5 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { fingerprintFromPem, sameSiteHost, secretsMatch } from './security'
 import fs from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
@@ -308,7 +309,7 @@ function markFailure(meetingId: string, ip: string) {
 }
 
 function hostGuard(meeting: Meeting, secret: string | undefined): boolean {
-  return Boolean(secret) && secret === meeting.hostSecret
+  return typeof secret === 'string' && secretsMatch(secret, meeting.hostSecret)
 }
 
 function applyHost(meeting: Meeting, peer: Peer, action: HostAction, targetId?: string, enabled?: boolean, port = 0) {
@@ -472,6 +473,8 @@ function handleSocket(ws: AliveSocket, ip: string) {
       if (!target || target.waiting) return
       const data = message.data as SignalData
       if (!data || typeof data !== 'object') return
+      if ('description' in data && data.description?.sdp && data.description.sdp.length > 100_000) return
+      if ('candidate' in data && data.candidate?.candidate && data.candidate.candidate.length > 2_000) return
       send(target.ws, { type: 'signal', from: peer.id, data })
       return
     }
@@ -547,8 +550,8 @@ function createCertificate(ips: string[]) {
       { name: 'subjectAltName', altNames },
     ],
   })
-  const der = Buffer.from(pems.cert.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64')
-  const fingerprint = createHash('sha256').update(der).digest('hex').toUpperCase().match(/.{2}/g)?.join(':') ?? ''
+  const fingerprint = fingerprintFromPem(pems.cert)
+  if (!fingerprint) throw new Error('The meeting certificate could not be identified.')
   return { key: pems.private, cert: pems.cert, fingerprint }
 }
 
@@ -609,15 +612,27 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
   const app = express()
   app.disable('x-powered-by')
   app.use((_req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', _req.headers.origin || '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Host-Secret')
-    res.setHeader('Access-Control-Allow-Private-Network', 'true')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    if (_req.method === 'OPTIONS') {
-      res.status(204).end()
-      return
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self)')
+    if (!dev) {
+      res.setHeader(
+        'Content-Security-Policy',
+        [
+          "default-src 'self'",
+          "script-src 'self'",
+          "style-src 'self' 'unsafe-inline'",
+          "font-src 'self'",
+          "img-src 'self' data: blob:",
+          "media-src 'self' blob: mediastream:",
+          "connect-src 'self'",
+          "worker-src 'self' blob:",
+          "frame-ancestors 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ].join('; '),
+      )
     }
     next()
   })
@@ -682,6 +697,10 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
     }
     const title = cleanName(String(body.title || 'Meeting')) || 'Meeting'
     const password = typeof body.password === 'string' ? body.password.trim().slice(0, 128) : ''
+    if (password && password.length < 8) {
+      res.status(400).json({ error: 'weak-password' })
+      return
+    }
     const linkMode: LinkMode = body.linkMode === 'temp' ? 'temp' : 'network'
     const meeting: Meeting = {
       id: randomString(10, ID_ALPHABET),
@@ -692,7 +711,7 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
       linkMode,
       locked: false,
       waitingRoom: Boolean(body.waitingRoom),
-      allowStun: body.allowStun !== false,
+      allowStun: body.allowStun === true,
       createdAt: Date.now(),
       peers: new Map(),
       chat: [],
@@ -794,6 +813,12 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
   const server = scheme === 'https' ? https.createServer({ key: cert.key, cert: cert.cert }, app) : http.createServer(app)
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1_000_000 })
   wss.on('connection', (socket, request) => {
+    const origin = Array.isArray(request.headers.origin) ? request.headers.origin[0] : request.headers.origin
+    const host = Array.isArray(request.headers.host) ? request.headers.host[0] : request.headers.host
+    if (!sameSiteHost(origin, host)) {
+      socket.close(1008, 'origin')
+      return
+    }
     const address = request.socket.remoteAddress || 'unknown'
     handleSocket(socket as AliveSocket, address)
   })

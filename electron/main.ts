@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, session, sh
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { startMeetServer } from './server'
+import { fingerprintFromPem, isFingerprint, readPeerFingerprint } from './security'
 import { checkForUpdate, downloadOfferedUpdate, launchOfferedUpdate, revealOfferedUpdate } from './updates'
 
 const dev = process.env.MEETLOCAL_DEV === '1'
@@ -14,6 +15,11 @@ app.setAppUserModelId('com.meetlocal.app')
 
 let mainWindow: BrowserWindow | null = null
 let stopServer: (() => Promise<void>) | null = null
+const trustedCertificates = new Set<string>()
+
+function trustKey(host: string, fingerprint: string) {
+  return `${host.toLowerCase()}:${fingerprint}`
+}
 
 function installMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -33,11 +39,13 @@ async function createWindow() {
     staticDir: path.join(root, 'dist'),
   })
   stopServer = running.close
+  trustedCertificates.add(trustKey('127.0.0.1', running.fingerprint))
+  trustedCertificates.add(trustKey('localhost', running.fingerprint))
 
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
-    const subject = `${request.certificate.subjectName} ${request.certificate.issuerName}`
-    const local = request.hostname === '127.0.0.1' || request.hostname === 'localhost'
-    if (local || subject.includes('MeetLocal')) {
+    const fingerprint = fingerprintFromPem(request.certificate.data)
+    const host = request.hostname.toLowerCase()
+    if (isFingerprint(fingerprint) && trustedCertificates.has(trustKey(host, fingerprint))) {
       callback(0)
       return
     }
@@ -126,6 +134,21 @@ ipcMain.handle('updates:launch', () => launchOfferedUpdate())
 
 ipcMain.handle('updates:reveal', () => {
   revealOfferedUpdate()
+})
+
+ipcMain.handle('certificate:inspect', async (_event, pageUrl: string) => {
+  if (typeof pageUrl !== 'string' || pageUrl.length > 500) throw new Error('That meeting link is not valid.')
+  const report = await readPeerFingerprint(pageUrl)
+  return { ...report, trusted: trustedCertificates.has(trustKey(report.host, report.fingerprint)) }
+})
+
+ipcMain.handle('certificate:trust', (_event, payload: { host?: string; fingerprint?: string }) => {
+  const host = String(payload?.host || '').toLowerCase().replace(/^\[|\]$/g, '')
+  const fingerprint = String(payload?.fingerprint || '')
+  if (!isFingerprint(fingerprint) || !/^[a-z0-9.:-]+$/i.test(host) || host.length > 253) {
+    throw new Error('That certificate is not valid.')
+  }
+  trustedCertificates.add(trustKey(host, fingerprint))
 })
 
 const hasLock = app.requestSingleInstanceLock()

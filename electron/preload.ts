@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('meetlocal', {
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),
   launchUpdate: () => ipcRenderer.invoke('updates:launch'),
   revealUpdate: () => ipcRenderer.invoke('updates:reveal'),
+  inspectCertificate: (pageUrl: string) => ipcRenderer.invoke('certificate:inspect', pageUrl),
+  trustCertificate: (host: string, fingerprint: string) => ipcRenderer.invoke('certificate:trust', { host, fingerprint }),
   onUpdateProgress: (callback: (progress: { received: number; total: number }) => void) => {
     const listener = (_event: unknown, progress: { received: number; total: number }) => callback(progress)
     ipcRenderer.on('update-progress', listener)

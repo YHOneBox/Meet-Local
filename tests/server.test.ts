@@ -72,6 +72,8 @@ describe('meeting server', () => {
     expect(Array.isArray(sessionBody.interfaces)).toBe(true)
     expect(isLoopbackAddress('::ffff:127.0.0.1')).toBe(true)
     expect(isLoopbackAddress('192.168.1.2')).toBe(false)
+    expect(health.headers.get('access-control-allow-origin')).toBeNull()
+    expect(health.headers.get('x-frame-options')).toBe('DENY')
   })
 
   it('rejects a remote create and a wrong password, then relays chat', async () => {
@@ -164,5 +166,27 @@ describe('meeting server', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hostSecret: meeting.hostSecret }),
     })
+  })
+
+  it('keeps short passwords and foreign websites out', async () => {
+    const weak = await fetch(`${base()}/api/meetings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Short', password: 'tiny', linkMode: 'temp' }),
+    })
+    expect(weak.status).toBe(400)
+    const meeting = await create({ title: 'Quiet', linkMode: 'network' })
+    const info = await fetch(`${base()}/api/info?meetingId=${meeting.meetingId}`)
+    const body = (await info.json()) as { allowStun: boolean }
+    expect(body.allowStun).toBe(false)
+    const foreign = new WebSocket(`wss://127.0.0.1:${server.port}/ws`, {
+      rejectUnauthorized: false,
+      headers: { origin: 'https://evil.example' },
+    })
+    const closed = await new Promise<number>((resolve, reject) => {
+      foreign.once('close', (code) => resolve(code))
+      foreign.once('error', reject)
+    })
+    expect(closed).toBe(1008)
   })
 })

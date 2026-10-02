@@ -33,6 +33,8 @@ export type MeetLocalApi = {
   downloadUpdate: () => Promise<{ filePath: string; fileName: string; version: string }>
   launchUpdate: () => Promise<void>
   revealUpdate: () => Promise<void>
+  inspectCertificate: (pageUrl: string) => Promise<{ host: string; fingerprint: string; trusted: boolean }>
+  trustCertificate: (host: string, fingerprint: string) => Promise<void>
   onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void
 }
 

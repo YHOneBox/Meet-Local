@@ -13,9 +13,11 @@ MeetLocal is a portable meeting app for Windows, Mac, and Linux. One person host
 - Record the meeting to a WebM file on this computer.
 - Switch microphone, camera, and speaker, and lower video quality if the connection is tight.
 
-People have to be able to reach the address you share. A VPN link works for people on that VPN. A local-network link works for people on the same LAN. MeetLocal does not relay the call through a cloud service. If direct connection needs help, the app can use a public STUN server to discover addresses. Media still travels peer to peer.
+People have to be able to reach the address you share. A VPN link works for people on that VPN. A local-network link works for people on the same LAN. MeetLocal does not relay the call through a cloud service.
 
-The first time someone opens a link in a browser, the browser asks them to trust this computer’s certificate. Compare the fingerprint shown in MeetLocal if you want to be sure.
+Audio, video, and screen sharing are encrypted between the people in the call. The connection to the hosting computer is also encrypted. Before joining, compare the certificate fingerprint in your window with the one the host sees. A password is optional and is stored only as a hash on the host. Chat is visible to the people in the meeting, including the host, because the host’s computer runs the meeting. Address discovery through STUN is off unless the host turns it on, and even then it does not carry the call.
+
+The first time someone opens a link in a browser, the browser asks them to trust this computer’s certificate. In the MeetLocal app, a guest confirms that same fingerprint before the app trusts the host.
 
 ## Run it while developing
 

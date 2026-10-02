@@ -53,7 +53,16 @@ Those files are attached to the GitHub release for that tag. The builds are unsi
 
 ## Updates
 
-The desktop app checks [GitHub releases](https://github.com/YHOneBox/Meet-Local/releases) when it opens. If a newer version is published, MeetLocal shows the release notes and downloads the build for this computer. The file keeps the version in its name, for example `MeetLocal-1.2.0-windows-x64.exe`, and sits next to the current app (or in Downloads). Opening it starts that version. The copy you are using stays in place. The same notes stay available from **What’s new** after you update.
+The desktop app checks [GitHub releases](https://github.com/YHOneBox/Meet-Local/releases) when it opens. If a newer version is published, MeetLocal shows the release notes and downloads the build for this computer. The file keeps the version in its name, for example `MeetLocal-1.2.0-windows-x64.exe`, and sits next to the current app. Opening it starts that version. The copy you are using stays in place. The same notes stay available from **What’s new** after you update.
+
+## Data on this computer
+
+MeetLocal does not keep the meeting. Chat, video, and the password exist only while the call is open. What it does keep is stored with the app, in a folder named `MeetLocal-data`:
+
+- On Windows and Linux, that folder is next to the app file.
+- On Mac, it is inside the app.
+
+That folder holds your display name, microphone and camera choices, cached release notes, and recordings you save. Copy the app together with `MeetLocal-data` and those settings come with it. A Windows or Linux app is a single file, so the data folder has to sit beside it.
 
 ## Checks
 

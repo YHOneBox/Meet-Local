@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import http from 'node:http'
 import https from 'node:https'
 import path from 'node:path'
+import { appHomeDirectory } from './data-path'
 import {
   compareVersions,
   isAllowedDownloadHost,
@@ -205,11 +206,16 @@ export async function checkForUpdate(platform = process.platform, arch = process
 
 async function saveDirectory(): Promise<string> {
   const candidates = [
-    process.env.PORTABLE_EXECUTABLE_DIR,
-    process.env.APPIMAGE ? path.dirname(process.env.APPIMAGE) : '',
-    app.isPackaged ? path.dirname(process.execPath) : '',
-    app.getPath('downloads'),
-  ].filter((dir): dir is string => Boolean(dir))
+    appHomeDirectory({
+      portableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+      appImage: process.env.APPIMAGE,
+      packaged: app.isPackaged,
+      platform: process.platform,
+      execPath: process.execPath,
+      appPath: app.getAppPath(),
+    }),
+    app.getPath('userData'),
+  ]
   for (const dir of candidates) {
     try {
       await fs.access(dir, fsConstants.W_OK)
@@ -218,7 +224,7 @@ async function saveDirectory(): Promise<string> {
       /* try the next folder */
     }
   }
-  return app.getPath('downloads')
+  return app.getPath('userData')
 }
 
 async function follow(url: string, hops = 0): Promise<http.IncomingMessage> {
@@ -289,7 +295,7 @@ export async function launchDownloaded(filePath: string, version: string) {
   const resolved = path.resolve(filePath)
   const folder = path.resolve(await saveDirectory())
   const relative = path.relative(folder, resolved)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('The update is not in the downloads folder.')
+  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('The update is not next to this app.')
   await fs.access(resolved)
   const extension = path.extname(resolved).toLowerCase()
   if (extension === '.zip') {

@@ -1,11 +1,23 @@
 import { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, session, shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { dataDirectoryCandidates, selectWritableDirectory } from './data-path'
 import { startMeetServer } from './server'
 import { fingerprintFromPem, isFingerprint, readPeerFingerprint } from './security'
 import { checkForUpdate, downloadOfferedUpdate, launchOfferedUpdate, revealOfferedUpdate } from './updates'
 
 const dev = process.env.MEETLOCAL_DEV === '1'
+const dataDir = selectWritableDirectory(
+  dataDirectoryCandidates({
+    portableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+    appImage: process.env.APPIMAGE,
+    packaged: app.isPackaged,
+    platform: process.platform,
+    execPath: process.execPath,
+    appPath: app.getAppPath(),
+  }),
+)
+app.setPath('userData', dataDir)
 
 app.commandLine.appendSwitch(
   'disable-features',
@@ -112,8 +124,11 @@ ipcMain.handle('desktop-sources', async () => {
 })
 
 ipcMain.handle('save-file', async (_event, payload: { bytes: Uint8Array; filename: string }) => {
+  const recordings = path.join(app.getPath('userData'), 'recordings')
+  await fs.mkdir(recordings, { recursive: true })
+  const filename = path.basename(String(payload.filename || 'meeting.webm')).replace(/[^\w.-]+/g, '_') || 'meeting.webm'
   const options = {
-    defaultPath: payload.filename,
+    defaultPath: path.join(recordings, filename),
     filters: [{ name: 'WebM video', extensions: ['webm'] }],
   }
   const result = mainWindow ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options)

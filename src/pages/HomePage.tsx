@@ -32,6 +32,8 @@ export function HomePage() {
   const [copied, setCopied] = useState('')
   const [resume, setResume] = useState(false)
   const [browserNote, setBrowserNote] = useState('')
+  const [view, setView] = useState<'home' | 'create' | 'join' | 'settings'>('home')
+  const [showOptions, setShowOptions] = useState(false)
 
   useEffect(() => {
     document.title = 'MeetLocal'
@@ -69,6 +71,7 @@ export function HomePage() {
   const vpnCount = interfaces.filter((item) => item.kind === 'vpn').length
 
   const selectedLink = useMemo(() => created?.links.find((link) => link.url === selectedUrl) ?? created?.links[0], [created, selectedUrl])
+  const selectedInterface = interfaces.find((item) => item.address === address)
 
   async function onCreate() {
     setBusy(true)
@@ -217,40 +220,74 @@ export function HomePage() {
   }
 
   return (
-    <div className="shell">
+    <div className="shell home">
       <header className="topbar">
         <div className="brand">
-          <img className="brand-logo" src="/logo.png" alt="MeetLocal" width="180" height="120" />
+          <img className="brand-logo" src="/logo.png" alt="MeetLocal" width="132" height="88" />
         </div>
-        <span className="pill">Hosted on this computer</span>
+        {!created && view !== 'settings' && (
+          <button className="btn ghost" type="button" data-testid="open-settings" onClick={() => setView('settings')}>
+            Settings
+          </button>
+        )}
       </header>
-      <main className="home-grid">
-        <section className="hero-copy">
-          <p className="kicker">Voice, video, and screen sharing</p>
-          <h1>Meet on your own network.</h1>
-          <p className="lede">
-            Start a call from this device, then hand someone a VPN address or a temporary link. Audio and video travel directly between the people in the call.
-          </p>
-            <ul className="facts">
-            <li>Voice and video are encrypted between the people in the call.</li>
-            <li>Choose a whole screen or one window when you share.</li>
-            <li>A temporary link hides this computer’s address and stops when the meeting ends.</li>
-          </ul>
-        </section>
-        <section className="stack">
-          <UpdateCard />
-          {resume && !created && (
-            <div className="banner-card">
-              <div>
-                <strong>Your meeting is still open</strong>
-                <p>Return to it, or end it before creating another.</p>
+      <main className="stack">
+        {created ? null : view === 'home' ? (
+          <>
+            <h1>Meet on your own network.</h1>
+            <p className="hint">This window hosts the call. The meeting opens in your browser.</p>
+            <UpdateCard />
+            {resume && (
+              <div className="banner-card">
+                <div>
+                  <strong>Your meeting is still open</strong>
+                  <p>Return to it, or start another.</p>
+                </div>
+                <button className="btn primary" type="button" onClick={resumeMeeting}>
+                  Return
+                </button>
               </div>
-              <button className="btn primary" type="button" onClick={resumeMeeting}>
-                Return
-              </button>
-            </div>
-          )}
-          {!created && canHost && (
+            )}
+            {canHost ? (
+              <div className="home-actions">
+                <button className="btn primary wide" type="button" data-testid="start-meeting" onClick={() => setView('create')}>
+                  New meeting
+                </button>
+                <button className="btn wide" type="button" data-testid="open-join" onClick={() => setView('join')}>
+                  Join with a link
+                </button>
+              </div>
+            ) : (
+              <form
+                className="panel"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  joinExisting()
+                }}
+              >
+                <h2>Join a meeting</h2>
+                <p className="hint">Hosting stays on the computer running MeetLocal.</p>
+                <label className="field">
+                  <span>Meeting link</span>
+                  <input
+                    data-testid="join-input"
+                    value={joinInput}
+                    placeholder="https://…"
+                    onChange={(event) => {
+                      setJoinInput(event.target.value)
+                      setJoinError('')
+                    }}
+                  />
+                </label>
+                {joinError && <p className="error">{joinError}</p>}
+                <button className="btn primary wide" type="submit" data-testid="join-continue">
+                  Continue
+                </button>
+              </form>
+            )}
+          </>
+        ) : null}
+        {!created && view === 'create' && canHost && (
             <form
               className="panel"
               onSubmit={(event) => {
@@ -258,11 +295,37 @@ export function HomePage() {
                 void onCreate()
               }}
             >
+              <button className="text-back" type="button" data-testid="home-back" onClick={() => setView('home')}>
+                Back
+              </button>
               <h2>New meeting</h2>
               <label className="field">
                 <span>Title</span>
                 <input data-testid="meeting-title-input" value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
               </label>
+              <div className="field">
+                <span>Link to share</span>
+                <div className="segmented">
+                  <button type="button" className={linkMode === 'network' ? 'active' : ''} data-testid="link-network" onClick={() => setLinkMode('network')}>
+                    This device
+                  </button>
+                  <button type="button" className={linkMode === 'temp' ? 'active' : ''} data-testid="link-temp" onClick={() => setLinkMode('temp')}>
+                    Temporary link
+                  </button>
+                </div>
+                <p className="hint">
+                  {linkMode === 'temp'
+                    ? 'A temporary address with no IP. It stops when the meeting ends.'
+                    : selectedInterface
+                      ? `Sharing over ${selectedInterface.label}.`
+                      : 'People on your VPN or local network can join.'}
+                </p>
+              </div>
+              <button className="btn ghost wide" type="button" data-testid="meeting-options" onClick={() => setShowOptions((open) => !open)}>
+                {showOptions ? 'Hide options' : 'Options'}
+              </button>
+              {showOptions && (
+                <>
               <label className="check">
                 <input data-testid="password-toggle" type="checkbox" checked={usePassword} onChange={(event) => setUsePassword(event.target.checked)} />
                 Require a password
@@ -303,22 +366,6 @@ export function HomePage() {
                   </div>
                 </div>
               )}
-              <div className="field">
-                <span>Link to share</span>
-                <div className="segmented">
-                  <button type="button" className={linkMode === 'network' ? 'active' : ''} data-testid="link-network" onClick={() => setLinkMode('network')}>
-                    Address on this device
-                  </button>
-                  <button type="button" className={linkMode === 'temp' ? 'active' : ''} data-testid="link-temp" onClick={() => setLinkMode('temp')}>
-                    Temporary link
-                  </button>
-                </div>
-                <p className="hint">
-                  {linkMode === 'temp'
-                    ? 'Cloudflare creates a temporary web address that does not include this computer’s IP. The page and chat pass through that address. Voice and video stay encrypted between the people in the call, and the link stops when the meeting ends.'
-                    : 'A link that uses the network address you pick below. It also stops working when you end the meeting.'}
-                </p>
-              </div>
               {linkMode === 'network' && (
                 <div className="field">
                   <span>Share over</span>
@@ -353,19 +400,15 @@ export function HomePage() {
               </label>
               <label className="check">
                 <input type="checkbox" checked={allowStun} onChange={(event) => setAllowStun(event.target.checked)} data-testid="allow-stun" />
-                Help devices find each other with STUN. This does not carry audio or video, and it is off unless you turn it on.
+                Help devices find each other. This does not carry the call.
               </label>
+                </>
+              )}
               {error && <p className="error">{error}</p>}
               <button className="btn primary wide" type="submit" disabled={busy || (usePassword && password.length < 8)} data-testid="create-meeting">
                 {busy ? (linkMode === 'temp' ? 'Creating address…' : 'Creating…') : 'Create meeting'}
               </button>
             </form>
-          )}
-          {!created && !canHost && (
-            <div className="panel">
-              <h2>Join a meeting</h2>
-              <p className="hint">This page was opened from another computer. Hosting stays on the machine running MeetLocal.</p>
-            </div>
           )}
           {created && (
             <div className="panel share-panel">
@@ -453,42 +496,46 @@ export function HomePage() {
               </div>
             </div>
           )}
-          <form
-            className="panel join-card"
-            onSubmit={(event) => {
-              event.preventDefault()
-              joinExisting()
-            }}
-          >
-            <h2>Join with a link</h2>
-            <label className="field">
-              <span>Meeting link</span>
-              <input
-                data-testid="join-input"
-                value={joinInput}
-                placeholder="https://…"
-                onChange={(event) => {
-                  setJoinInput(event.target.value)
-                  setJoinError('')
-                }}
-              />
-            </label>
-            {joinError && <p className="error">{joinError}</p>}
-            <button className="btn wide" type="submit" data-testid="join-continue">
-              Continue
-            </button>
-          </form>
-          <section className="panel" data-testid="settings-panel">
-            <h2>Settings</h2>
-            <p className="hint">These choices are saved with this app. The browser you open for a meeting uses them too. Font size starts small.</p>
-            <SettingsFields prefs={prefs} onChange={updatePrefs} />
-          </section>
-          {fingerprint && !created && (
-            <p className="fine">
-              This device fingerprint <span className="mono">{fingerprint}</span>
-            </p>
+          {!created && view === 'join' && canHost && (
+            <form
+              className="panel"
+              onSubmit={(event) => {
+                event.preventDefault()
+                joinExisting()
+              }}
+            >
+              <button className="text-back" type="button" data-testid="home-back" onClick={() => setView('home')}>
+                Back
+              </button>
+              <h2>Join with a link</h2>
+              <label className="field">
+                <span>Meeting link</span>
+                <input
+                  data-testid="join-input"
+                  value={joinInput}
+                  placeholder="https://…"
+                  onChange={(event) => {
+                    setJoinInput(event.target.value)
+                    setJoinError('')
+                  }}
+                />
+              </label>
+              {joinError && <p className="error">{joinError}</p>}
+              <button className="btn primary wide" type="submit" data-testid="join-continue">
+                Continue
+              </button>
+            </form>
           )}
-        </section>
+          {!created && view === 'settings' && (
+            <section className="panel" data-testid="settings-panel">
+              <button className="text-back" type="button" data-testid="home-back" onClick={() => setView('home')}>
+                Back
+              </button>
+              <h2>Settings</h2>
+              <p className="hint">Saved with this app, and used when the meeting opens in your browser.</p>
+              <SettingsFields prefs={prefs} onChange={updatePrefs} />
+            </section>
+          )}
       </main>
     </div>
   )

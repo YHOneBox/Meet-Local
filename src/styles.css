@@ -271,10 +271,29 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6p
 }
 
 html[data-host="app"] .shell { padding: 16px 18px 28px; }
-html[data-host="app"] .home-grid { grid-template-columns: 1fr; gap: 16px; }
-html[data-host="app"] .hero-copy h1 { font-size: 40px; }
-html[data-host="app"] .lede { font-size: 15px; }
-html[data-host="app"] .topbar { margin-bottom: 16px; }
+html[data-host="app"] .topbar { margin-bottom: 8px; }
+
+.home { max-width: 440px; margin: 0 auto; }
+.home .brand-logo { width: 132px; }
+.home h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  margin: 8px 0 0;
+}
+.home-actions { display: grid; gap: 10px; }
+.text-back {
+  border: 0;
+  background: transparent;
+  color: var(--teal-deep);
+  padding: 0 0 8px;
+  font-weight: 650;
+}
+.settings-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.settings-tabs button { padding: 8px 6px; border: 1px solid var(--line); background: #fff; border-radius: 999px; }
+.settings-tabs button.active { border-color: var(--teal); background: #f3faf8; color: var(--teal-deep); }
 
 .settings-fields { display: grid; gap: 12px; }
 .style-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }

@@ -2,10 +2,28 @@ import { expect, test, type Page } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
+async function openApp(page: Page) {
+  let last: unknown
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded' })
+      return
+    } catch (error) {
+      last = error
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('ERR_NETWORK_ACCESS_DENIED') || attempt === 2) throw error
+      await page.waitForTimeout(500)
+    }
+  }
+  throw last
+}
+
 async function createMeeting(page: Page, options: { password?: boolean; waiting?: boolean; temp?: boolean }) {
-  await page.goto('/')
+  await openApp(page)
   await expect(page.getByRole('heading', { name: 'Meet on your own network.' })).toBeVisible()
+  await page.getByTestId('start-meeting').click()
   await page.getByTestId('meeting-title-input').fill(options.waiting ? 'Standup' : 'Ship review')
+  await page.getByTestId('meeting-options').click()
   await page.getByTestId('allow-stun').uncheck()
   if (options.password) {
     await page.getByTestId('password-toggle').check()
@@ -263,7 +281,7 @@ test('an available GitHub release shows its changelog and versioned download', a
       },
     }
   })
-  await page.goto('/')
+  await openApp(page)
   await expect(page.getByTestId('update-banner')).toContainText('1.2.0')
   await expect(page.getByTestId('update-banner')).toContainText('MeetLocal-1.2.0-windows-x64.exe')
   await page.getByTestId('update-notes').click()
@@ -275,7 +293,8 @@ test('an available GitHub release shows its changelog and versioned download', a
 
 test('font starts small and the meeting keeps a chosen style', async ({ page }) => {
   try {
-    await page.goto('/')
+    await openApp(page)
+    await page.getByTestId('open-settings').click()
     await expect(page.getByTestId('settings-font')).toHaveValue('small')
     await page.getByTestId('settings-style').selectOption('paper')
     await expect(page.locator('html')).toHaveAttribute('data-style', 'paper')
@@ -289,7 +308,8 @@ test('font starts small and the meeting keeps a chosen style', async ({ page }) 
     await expect(page.locator('.room').last()).toHaveClass(/style-contrast/)
     await expect(page.locator('html')).toHaveAttribute('data-font', 'large')
   } finally {
-    await page.goto('/')
+    await openApp(page)
+    await page.getByTestId('open-settings').click()
     await page.getByTestId('settings-font').selectOption('small')
     await page.getByTestId('settings-style').selectOption('night')
   }

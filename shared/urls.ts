@@ -39,6 +39,19 @@ export function formatHost(address: string): string {
   return address.includes(':') ? `[${address}]` : address
 }
 
+export function hostHidesAddress(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1') return false
+  if (/\d{1,3}(?:\.\d{1,3}){3}/.test(host)) return false
+  if (/\d{1,3}(?:-\d{1,3}){3}/.test(host)) return false
+  return true
+}
+
+export function visibleShareUrl(publicUrl: string | null | undefined, savedUrl: string | null | undefined): string {
+  if (publicUrl) return publicUrl
+  return savedUrl || ''
+}
+
 export function buildShareUrl(address: string, port: number, mode: LinkMode, idOrToken: string, scheme: 'http' | 'https' = 'https'): string {
   const path = mode === 'temp' ? `/t/${idOrToken}` : `/m/${idOrToken}`
   return `${scheme}://${formatHost(address)}:${port}${path}`

@@ -1,6 +1,6 @@
 import type { ChatMessage, PeerInfo, ServerMessage, SignalData } from '../shared/protocol'
 import { websocketUrl } from '../shared/urls'
-import type { Handoff } from './store'
+import { readHost, saveHost, type Handoff } from './store'
 
 export type PeerView = {
   info: PeerInfo
@@ -234,6 +234,19 @@ export class RoomSession {
     this.send({ type: 'host', action, targetId, enabled })
   }
 
+  private rememberShareUrl(publicUrl: string | null, tempToken: string | null, linkMode: 'network' | 'temp') {
+    if (!this.self?.isHost || !publicUrl) return
+    const host = readHost()
+    if (!host) return
+    saveHost({
+      ...host,
+      linkMode,
+      shareUrl: publicUrl,
+      tempToken: tempToken || host.tempToken,
+      enterPath: tempToken ? `/t/${tempToken}` : host.enterPath,
+    })
+  }
+
   private stopScreenTracks() {
     this.screenTrack?.stop()
     this.screenStream?.getTracks().forEach((track) => track.stop())
@@ -394,11 +407,13 @@ export class RoomSession {
     }
     if (message.type === 'meeting-updated') {
       this.meeting = message.meeting
+      this.rememberShareUrl(message.meeting.publicUrl, message.meeting.tempToken, message.meeting.linkMode)
       this.emit()
       return
     }
     if (message.type === 'temp-token' && this.meeting) {
-      this.meeting = { ...this.meeting, tempToken: message.tempToken }
+      this.meeting = { ...this.meeting, tempToken: message.tempToken, publicUrl: message.publicUrl }
+      this.rememberShareUrl(message.publicUrl, message.tempToken, 'temp')
       this.onToast('The temporary link was replaced.')
       this.emit()
       return

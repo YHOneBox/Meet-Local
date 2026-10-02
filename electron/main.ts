@@ -49,6 +49,7 @@ async function createWindow() {
     dev,
     projectRoot: root,
     staticDir: path.join(root, 'dist'),
+    dataDir,
   })
   stopServer = running.close
   trustedCertificates.add(trustKey('127.0.0.1', running.fingerprint))

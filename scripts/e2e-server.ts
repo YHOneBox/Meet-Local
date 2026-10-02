@@ -5,6 +5,7 @@ const running = await startMeetServer({
   port: 47999,
   listenHost: '127.0.0.1',
   tls: false,
+  publicBase: 'http://meet.example.test',
   staticDir: path.resolve('dist'),
   projectRoot: path.resolve('.'),
 })

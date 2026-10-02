@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyInterface, friendlyInterfaceLabel } from '../shared/network'
-import { buildShareUrl, generatePassword, parseMeetingLink, passwordStrength, websocketUrl } from '../shared/urls'
+import { buildShareUrl, generatePassword, hostHidesAddress, parseMeetingLink, passwordStrength, visibleShareUrl, websocketUrl } from '../shared/urls'
 
 describe('network classification', () => {
   it('recognizes VPN adapters and Tailscale addresses', () => {
@@ -37,6 +37,12 @@ describe('passwords and links', () => {
       httpBase: 'https://100.64.1.5:47321',
       tempToken: 'abcDEF234567',
     })
+    expect(hostHidesAddress('blue-harbor.trycloudflare.com')).toBe(true)
+    expect(hostHidesAddress('192.168.1.20')).toBe(false)
+    expect(hostHidesAddress('uljtt-30-47-152-61.run.example')).toBe(false)
+    expect(visibleShareUrl('https://blue-harbor.trycloudflare.com/t/newtoken', 'https://192.168.1.20:47321/t/oldtoken')).toBe(
+      'https://blue-harbor.trycloudflare.com/t/newtoken',
+    )
     const network = buildShareUrl('192.168.0.8', 443, 'network', 'abcdefghij')
     expect(parseMeetingLink(network, 'https://127.0.0.1')?.meetingId).toBe('abcdefghij')
     expect(parseMeetingLink('not a link', 'https://127.0.0.1:1')).toBeNull()

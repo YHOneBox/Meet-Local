@@ -7,7 +7,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 let server: RunningServer
 
 beforeAll(async () => {
-  server = await startMeetServer({ port: 0, listenHost: '127.0.0.1', staticDir: 'dist' })
+  server = await startMeetServer({ port: 0, listenHost: '127.0.0.1', staticDir: 'dist', publicBase: 'https://meet.example.test' })
 })
 
 afterAll(async () => {
@@ -81,8 +81,8 @@ describe('meeting server', () => {
     expect(meeting.enterPath).toBe(`/t/${meeting.tempToken}`)
     expect(meeting.port).toBe(server.port)
     for (const link of meeting.links) {
-      expect(link.url).toContain(`/t/${meeting.tempToken}`)
-      expect(link.url.startsWith('https://')).toBe(true)
+      expect(link.url).toBe(`https://meet.example.test/t/${meeting.tempToken}`)
+      expect(link.url).not.toMatch(/\d{1,3}(?:\.\d{1,3}){3}/)
     }
     const hidden = await fetch(`${base()}/api/info?meetingId=${meeting.meetingId}`)
     expect(hidden.status).toBe(404)
@@ -188,5 +188,20 @@ describe('meeting server', () => {
       foreign.once('error', reject)
     })
     expect(closed).toBe(1008)
+  })
+
+  it('replaces a temporary link without putting the computer address in it', async () => {
+    const meeting = await create({ title: 'Rotate', linkMode: 'temp' })
+    const host = await connect()
+    const joined = waitFor(host, 'joined')
+    host.send(JSON.stringify({ type: 'join', name: 'Alex', tempToken: meeting.tempToken, hostSecret: meeting.hostSecret }))
+    await joined
+    const replaced = waitFor(host, 'temp-token')
+    host.send(JSON.stringify({ type: 'host', action: 'regenerate-temp' }))
+    const message = (await replaced) as { tempToken: string; publicUrl: string }
+    expect(message.tempToken).not.toBe(meeting.tempToken)
+    expect(message.publicUrl).toBe(`https://meet.example.test/t/${message.tempToken}`)
+    expect(message.publicUrl).not.toMatch(/\d{1,3}(?:\.\d{1,3}){3}/)
+    host.close()
   })
 })

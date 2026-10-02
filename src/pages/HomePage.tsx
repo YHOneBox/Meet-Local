@@ -206,10 +206,10 @@ export function HomePage() {
           <p className="lede">
             Start a call from this device, then hand someone a VPN address or a temporary link. Audio and video travel directly between the people in the call.
           </p>
-          <ul className="facts">
+            <ul className="facts">
             <li>Voice and video are encrypted between the people in the call.</li>
-            <li>Share a whole screen or a single window.</li>
-            <li>The temporary link stops working when the meeting ends.</li>
+            <li>Choose a whole screen or one window when you share.</li>
+            <li>A temporary link hides this computer’s address and stops when the meeting ends.</li>
           </ul>
         </section>
         <section className="stack">
@@ -290,36 +290,38 @@ export function HomePage() {
                 </div>
                 <p className="hint">
                   {linkMode === 'temp'
-                    ? 'A random link that stops working the moment the meeting ends. The meeting id is not in the link.'
-                    : 'A stable link for this meeting, using the network address you pick below. It also stops working when you end the meeting.'}
+                    ? 'Cloudflare creates a temporary web address that does not include this computer’s IP. The page and chat pass through that address. Voice and video stay encrypted between the people in the call, and the link stops when the meeting ends.'
+                    : 'A link that uses the network address you pick below. It also stops working when you end the meeting.'}
                 </p>
               </div>
-              <div className="field">
-                <span>Share over</span>
-                {interfaces.length === 0 && <p className="hint">No LAN or VPN address was found. You can still open the meeting on this computer.</p>}
-                <div className="choices">
-                  {interfaces.map((item) => (
-                    <label key={`${item.name}-${item.address}`} className={address === item.address ? 'choice active' : 'choice'}>
-                      <input
-                        type="radio"
-                        name="address"
-                        checked={address === item.address}
-                        onChange={() => setAddress(item.address)}
-                        data-testid="address-option"
-                        data-kind={item.kind}
-                        data-address={item.address}
-                      />
-                      <span className={`badge ${item.kind}`}>{item.kind === 'vpn' ? 'VPN' : item.kind === 'lan' ? 'Local network' : 'Other'}</span>
-                      <strong>{item.label}</strong>
-                      <em>{item.address}</em>
-                      <small>{item.name}</small>
-                    </label>
-                  ))}
+              {linkMode === 'network' && (
+                <div className="field">
+                  <span>Share over</span>
+                  {interfaces.length === 0 && <p className="hint">No LAN or VPN address was found. You can still open the meeting on this computer.</p>}
+                  <div className="choices">
+                    {interfaces.map((item) => (
+                      <label key={`${item.name}-${item.address}`} className={address === item.address ? 'choice active' : 'choice'}>
+                        <input
+                          type="radio"
+                          name="address"
+                          checked={address === item.address}
+                          onChange={() => setAddress(item.address)}
+                          data-testid="address-option"
+                          data-kind={item.kind}
+                          data-address={item.address}
+                        />
+                        <span className={`badge ${item.kind}`}>{item.kind === 'vpn' ? 'VPN' : item.kind === 'lan' ? 'Local network' : 'Other'}</span>
+                        <strong>{item.label}</strong>
+                        <em>{item.address}</em>
+                        <small>{item.name}</small>
+                      </label>
+                    ))}
+                  </div>
+                  {vpnCount === 0 && interfaces.length > 0 && (
+                    <p className="hint">No VPN adapter was detected. People need to be on the same local network as this computer.</p>
+                  )}
                 </div>
-                {vpnCount === 0 && interfaces.length > 0 && (
-                  <p className="hint">No VPN adapter was detected. People need to be on the same local network as this computer.</p>
-                )}
-              </div>
+              )}
               <label className="check">
                 <input type="checkbox" checked={waitingRoom} onChange={(event) => setWaitingRoom(event.target.checked)} data-testid="waiting-toggle" />
                 Ask me to admit people before they join
@@ -330,7 +332,7 @@ export function HomePage() {
               </label>
               {error && <p className="error">{error}</p>}
               <button className="btn primary wide" type="submit" disabled={busy || (usePassword && password.length < 8)} data-testid="create-meeting">
-                {busy ? 'Creating…' : 'Create meeting'}
+                {busy ? (linkMode === 'temp' ? 'Creating address…' : 'Creating…') : 'Create meeting'}
               </button>
             </form>
           )}
@@ -354,9 +356,10 @@ export function HomePage() {
               </div>
               <p className="hint">
                 {created.linkMode === 'temp'
-                  ? 'This temporary link works only for this meeting. Ending the meeting retires it.'
+                  ? 'This address does not include your IP. It works only for this meeting, and ending the meeting retires it. The first temporary link downloads Cloudflare’s address helper.'
                   : 'Pick the VPN or local address your friend can actually reach.'}
               </p>
+              {created.linkMode !== 'temp' && (
               <div className="choices">
                 {created.links.map((link) => (
                   <button
@@ -374,7 +377,8 @@ export function HomePage() {
                   </button>
                 ))}
               </div>
-              {created.links.length === 0 && <p className="hint">There is no reachable network address yet. Join on this computer, then share a link after a VPN or LAN address appears.</p>}
+              )}
+              {created.linkMode !== 'temp' && created.links.length === 0 && <p className="hint">There is no reachable network address yet. Join on this computer, then share a link after a VPN or LAN address appears.</p>}
               {selectedUrl && (
                 <div className="url-box">
                   <code data-testid="share-url">{selectedUrl}</code>
@@ -395,7 +399,9 @@ export function HomePage() {
               )}
               {selectedLink && (
                 <p className="hint">
-                  The first time someone opens this in a browser, they need to trust this computer’s certificate. The certificate fingerprint is{' '}
+                  {created.linkMode === 'temp'
+                    ? 'Guests open a Cloudflare address, so their browser trusts Cloudflare rather than this computer. This computer’s meeting fingerprint is still '
+                    : 'The first time someone opens this in a browser, they need to trust this computer’s certificate. The certificate fingerprint is '}
                   <span className="mono" data-testid="fingerprint">
                     {created.fingerprint}
                   </span>

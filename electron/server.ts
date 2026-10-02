@@ -25,6 +25,7 @@ import {
   type SignalData,
 } from '../shared/protocol'
 import { buildShareUrl } from '../shared/urls'
+import { openPublicTunnel } from './public-tunnel'
 
 const ID_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 const TOKEN_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -51,6 +52,7 @@ type Meeting = {
   tempToken: string
   hostSecret: string
   linkMode: LinkMode
+  publicBase: string
   locked: boolean
   waitingRoom: boolean
   allowStun: boolean
@@ -97,6 +99,8 @@ export type ServerOptions = {
   staticDir?: string
   dev?: boolean
   projectRoot?: string
+  publicBase?: string
+  dataDir?: string
 }
 
 export type RunningServer = {
@@ -109,6 +113,39 @@ const meetings = new Map<string, Meeting>()
 const tokens = new Map<string, string>()
 const tombstones = new Map<string, number>()
 const passwordFailures = new Map<string, { count: number; resetAt: number }>()
+let tunnelClose: (() => void) | null = null
+let tunnelBase = ''
+let tunnelOpening: Promise<string> | null = null
+
+function releasePublicTunnel() {
+  const stillUsed = [...meetings.values()].some((meeting) => meeting.publicBase && meeting.publicBase === tunnelBase)
+  if (stillUsed) return
+  tunnelClose?.()
+  tunnelClose = null
+  tunnelBase = ''
+  tunnelOpening = null
+}
+
+async function ensurePublicBase(port: number, https: boolean, preset: string | undefined, dataDir: string | undefined): Promise<{ base: string; discovered: boolean }> {
+  const fixed = preset?.replace(/\/$/, '')
+  if (fixed) return { base: fixed, discovered: false }
+  if (tunnelBase) return { base: tunnelBase, discovered: true }
+  if (!tunnelOpening) {
+    tunnelOpening = openPublicTunnel({ port, https, dataDir })
+      .then((tunnel) => {
+        tunnelClose = tunnel.close
+        tunnelBase = tunnel.url
+        return tunnel.url
+      })
+      .catch((error: unknown) => {
+        tunnelOpening = null
+        throw error
+      })
+  }
+  const base = await tunnelOpening
+  tunnelOpening = null
+  return { base, discovered: true }
+}
 
 function randomString(length: number, alphabet: string): string {
   const bytes = randomBytes(length)
@@ -164,6 +201,11 @@ function cleanName(input: string): string | null {
   return name.length > 0 ? name : null
 }
 
+function publicMeetingUrl(meeting: Meeting): string | null {
+  if (meeting.linkMode !== 'temp' || !meeting.publicBase) return null
+  return `${meeting.publicBase.replace(/\/$/, '')}/t/${meeting.tempToken}`
+}
+
 function publicMeeting(meeting: Meeting, includeToken: boolean): MeetingPublic & { meetingId: string; tempToken: string | null } {
   return {
     meetingId: meeting.id,
@@ -173,6 +215,7 @@ function publicMeeting(meeting: Meeting, includeToken: boolean): MeetingPublic &
     waitingRoom: meeting.waitingRoom,
     allowStun: meeting.allowStun,
     requiresPassword: meeting.passwordHash !== null,
+    publicUrl: includeToken ? publicMeetingUrl(meeting) : null,
     tempToken: includeToken && meeting.linkMode === 'temp' ? meeting.tempToken : null,
   }
 }
@@ -231,6 +274,11 @@ function tombstoneHit(key: string | undefined): boolean {
 }
 
 function shareLinks(meeting: Meeting, port: number, scheme: 'http' | 'https'): ShareLink[] {
+  const published = publicMeetingUrl(meeting)
+  if (published) {
+    const hostname = new URL(published).hostname
+    return [{ name: 'temporary', label: 'Temporary link', address: hostname, kind: 'other', url: published }]
+  }
   const key = meeting.linkMode === 'temp' ? meeting.tempToken : meeting.id
   return listInterfaces().map((item) => ({
     name: item.name,
@@ -269,6 +317,7 @@ function endMeeting(meeting: Meeting) {
     peer.ws.close()
   }
   meetings.delete(meeting.id)
+  releasePublicTunnel()
 }
 
 function snapshot(meeting: Meeting, self: Peer): ServerMessage {
@@ -340,7 +389,8 @@ function applyHost(meeting: Meeting, peer: Peer, action: HostAction, targetId?: 
     meeting.tempToken = randomString(24, TOKEN_ALPHABET)
     tokens.set(meeting.tempToken, meeting.id)
     for (const host of admitted(meeting).filter((item) => item.isHost)) {
-      send(host.ws, { type: 'temp-token', tempToken: meeting.tempToken })
+      const publicUrl = publicMeetingUrl(meeting)
+      if (publicUrl) send(host.ws, { type: 'temp-token', tempToken: meeting.tempToken, publicUrl })
       send(host.ws, { type: 'meeting-updated', meeting: publicMeeting(meeting, true) })
     }
     return
@@ -702,6 +752,18 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
       return
     }
     const linkMode: LinkMode = body.linkMode === 'temp' ? 'temp' : 'network'
+    let publicBase = ''
+    let discovered = false
+    if (linkMode === 'temp') {
+      try {
+        const opened = await ensurePublicBase(boundPort, scheme === 'https', options.publicBase, options.dataDir)
+        publicBase = opened.base
+        discovered = opened.discovered
+      } catch {
+        res.status(503).json({ error: 'tunnel-unavailable' })
+        return
+      }
+    }
     const meeting: Meeting = {
       id: randomString(10, ID_ALPHABET),
       title,
@@ -709,9 +771,10 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
       tempToken: randomString(24, TOKEN_ALPHABET),
       hostSecret: randomBytes(32).toString('hex'),
       linkMode,
+      publicBase,
       locked: false,
       waitingRoom: Boolean(body.waitingRoom),
-      allowStun: body.allowStun === true,
+      allowStun: discovered || body.allowStun === true,
       createdAt: Date.now(),
       peers: new Map(),
       chat: [],
@@ -757,6 +820,20 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
       return
     }
     if (body.linkMode === 'temp' || body.linkMode === 'network') meeting.linkMode = body.linkMode
+    if (meeting.linkMode === 'temp') {
+      try {
+        const opened = await ensurePublicBase(boundPort, scheme === 'https', options.publicBase, options.dataDir)
+        meeting.publicBase = opened.base
+        if (opened.discovered) meeting.allowStun = true
+      } catch {
+        meeting.linkMode = 'network'
+        res.status(503).json({ error: 'tunnel-unavailable' })
+        return
+      }
+    } else {
+      meeting.publicBase = ''
+      releasePublicTunnel()
+    }
     for (const host of admitted(meeting).filter((item) => item.isHost)) {
       send(host.ws, { type: 'meeting-updated', meeting: publicMeeting(meeting, true) })
     }
@@ -866,6 +943,7 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
       tokens.clear()
       tombstones.clear()
       passwordFailures.clear()
+      releasePublicTunnel()
       await new Promise<void>((resolve) => wss.close(() => resolve()))
       await new Promise<void>((resolve) => server.close(() => resolve()))
       if (vite) await vite.close()

@@ -15,7 +15,7 @@ MeetLocal is a portable meeting app for Windows, Mac, and Linux. One person host
 
 People have to be able to reach the address you share. A VPN link works for people on that VPN. A local-network link works for people on the same LAN. MeetLocal does not relay the call through a cloud service.
 
-Audio, video, and screen sharing are encrypted between the people in the call. The connection to the hosting computer is also encrypted. Before joining, compare the certificate fingerprint in your window with the one the host sees. A password is optional and is stored only as a hash on the host. Chat is visible to the people in the meeting, including the host, because the host’s computer runs the meeting. Address discovery through STUN is off unless the host turns it on, and even then it does not carry the call.
+Audio, video, and screen sharing are encrypted between the people in the call. A device address stays on your VPN or local network. A temporary link is a Cloudflare address that does not include this computer’s IP. Cloudflare can see the meeting page and chat on that link. Voice and video still travel encrypted between the people in the call. Before joining a device address, compare the certificate fingerprint in your window with the one the host sees. A password is optional and is stored only as a hash on the host. Address discovery through STUN is off unless the host turns it on, or a public temporary link needs it, and even then it does not carry the call.
 
 The first time someone opens a link in a browser, the browser asks them to trust this computer’s certificate. In the MeetLocal app, a guest confirms that same fingerprint before the app trusts the host.
 

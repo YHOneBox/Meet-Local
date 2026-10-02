@@ -19,10 +19,11 @@ async function createMeeting(page: Page, options: { password?: boolean; waiting?
   await expect(page.getByTestId('enter-meeting')).toBeVisible()
   const path = (await page.getByTestId('enter-meeting').getAttribute('data-path')) ?? ''
   const password = options.password ? await page.getByTestId('share-password').innerText() : ''
-  if (await page.getByTestId('share-url').count()) {
+    if (await page.getByTestId('share-url').count()) {
     const url = await page.getByTestId('share-url').innerText()
     expect(url.startsWith('http://')).toBeTruthy()
     expect(url).toContain(options.temp ? '/t/' : '/m/')
+    if (options.temp) expect(url).not.toMatch(/\d{1,3}(?:\.\d{1,3}){3}/)
   }
   expect(path.startsWith(options.temp ? '/t/' : '/m/')).toBeTruthy()
   return { path, password }
@@ -87,6 +88,8 @@ test('password, media, chat, reactions, screen share, and recording', async ({ p
   await page.getByRole('button', { name: 'Done' }).click()
 
   await page.getByTestId('control-share').click()
+  await expect(page.getByTestId('screen-picker')).toBeVisible()
+  await page.getByTestId('share-choice-screen').click()
   await expect(page.getByTestId('presenting-banner')).toBeVisible()
   await expect(guest.getByTestId('screen-stage')).toBeVisible()
 

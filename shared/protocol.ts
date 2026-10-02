@@ -72,6 +72,7 @@ export type MeetingPublic = {
   waitingRoom: boolean
   allowStun: boolean
   requiresPassword: boolean
+  publicUrl: string | null
 }
 
 export type ServerMessage =
@@ -105,7 +106,7 @@ export type ServerMessage =
   | { type: 'chat'; message: ChatMessage }
   | { type: 'reaction'; fromId: string; fromName: string; emoji: ReactionEmoji }
   | { type: 'meeting-updated'; meeting: MeetingPublic & { meetingId: string; tempToken: string | null } }
-  | { type: 'temp-token'; tempToken: string }
+  | { type: 'temp-token'; tempToken: string; publicUrl: string }
 
 export type InterfaceKind = 'vpn' | 'lan' | 'other'
 

@@ -6,9 +6,9 @@ import QRCode from 'qrcode'
 import { loadPrefs, savePrefs, type Prefs } from '../prefs'
 import { MeetingRecorder, saveRecording } from '../recording'
 import { RoomSession, openDevices, type PeerView } from '../session'
-import { captureScreen } from '../meeting/ScreenPicker'
 import { ScreenPicker } from '../meeting/ScreenPicker'
 import { clearHost, readHost, readJoinTarget, takeHandoff } from '../store'
+import { visibleShareUrl } from '../../shared/urls'
 import { Avatar, Icon, MediaView, useSpeaking } from '../ui'
 
 type Dialog = 'none' | 'leave' | 'settings' | 'shortcuts' | 'details' | 'share'
@@ -97,6 +97,19 @@ export function MeetingPage() {
   }, [panel, dialog])
 
   useEffect(() => {
+    if (dialog !== 'details' || !session?.meeting) return
+    const next = shareLink(session)
+    if (!next) return
+    let cancel = false
+    void QRCode.toDataURL(next, { margin: 1, width: 240 }).then((value) => {
+      if (!cancel) setQr(value)
+    })
+    return () => {
+      cancel = true
+    }
+  }, [dialog, session, session?.meeting?.publicUrl, version])
+
+  useEffect(() => {
     if (!session) return
     if (session.chat.length > seenChat.current && panel !== 'chat') {
       const fresh = session.chat.slice(seenChat.current).filter((message) => message.fromId !== session.self?.id)
@@ -160,16 +173,7 @@ export function MeetingPage() {
       await current.stopScreen()
       return
     }
-    if (window.meetlocal?.isDesktop) {
-      setDialog('share')
-      return
-    }
-    try {
-      const stream = await captureScreen(undefined, false)
-      await current.startScreen(stream)
-    } catch {
-      pushToast('Screen sharing was cancelled.')
-    }
+    setDialog('share')
   }
 
   async function toggleRecord() {
@@ -452,10 +456,21 @@ export function MeetingPage() {
           <Icon name={session.camOn ? 'cam' : 'cam-off'} />
           <span>{session.camOn ? 'Stop video' : 'Start video'}</span>
         </button>
-        <button className={localSharing ? 'ctrl on' : 'ctrl'} type="button" data-testid="control-share" onClick={() => void beginShare()}>
-          <Icon name="screen" />
-          <span>{localSharing ? 'Stop share' : 'Share'}</span>
-        </button>
+        <div className="share-anchor">
+          <button className={localSharing ? 'ctrl on' : 'ctrl'} type="button" data-testid="control-share" onClick={() => void beginShare()}>
+            <Icon name="screen" />
+            <span>{localSharing ? 'Stop share' : 'Share'}</span>
+          </button>
+          {dialog === 'share' && session && (
+            <ScreenPicker
+              onClose={() => setDialog('none')}
+              onShare={(stream) => {
+                void session.startScreen(stream)
+                setDialog('none')
+              }}
+            />
+          )}
+        </div>
         <button className={session.raised ? 'ctrl on' : 'ctrl'} type="button" data-testid="control-hand" onClick={() => session.setRaised(!session.raised)}>
           <Icon name="hand" />
           <span>Raise</span>
@@ -565,15 +580,6 @@ export function MeetingPage() {
           </div>
         ))}
       </div>
-      {dialog === 'share' && (
-        <ScreenPicker
-          onClose={() => setDialog('none')}
-          onShare={(stream) => {
-            void session.startScreen(stream)
-            setDialog('none')
-          }}
-        />
-      )}
       {dialog === 'leave' && (
         <div className="modal-back">
           <div className="modal" role="dialog" aria-modal="true">
@@ -700,7 +706,11 @@ export function MeetingPage() {
         <div className="modal-back">
           <div className="modal" role="dialog" aria-modal="true" data-testid="details-dialog">
             <h2>Meeting details</h2>
-            {link && <code className="mono block">{link}</code>}
+            {link && (
+              <code className="mono block" data-testid="meeting-link">
+                {link}
+              </code>
+            )}
             {qr && <img className="qr" src={qr} alt="" />}
             {hostRecord?.password && (
               <p>
@@ -708,13 +718,25 @@ export function MeetingPage() {
               </p>
             )}
             {hostRecord?.fingerprint && <p className="fine">Fingerprint {hostRecord.fingerprint}</p>}
-            <p className="hint">People need to reach the address in the link, usually over the same VPN or local network. Browsers will ask them to trust this computer’s certificate once.</p>
+            <p className="hint">
+              {session.meeting?.linkMode === 'temp'
+                ? 'This temporary address does not include your IP. Replacing it retires the previous one. The page and chat pass through the address provider. Voice and video stay encrypted between the people in the call.'
+                : 'People need to reach the address in the link, usually over the same VPN or local network. Browsers will ask them to trust this computer’s certificate once.'}
+            </p>
             {session.self?.isHost && session.meeting?.linkMode === 'temp' && (
-              <button className="btn ghost" type="button" onClick={() => session.host('regenerate-temp')}>
+              <button className="btn ghost" type="button" data-testid="replace-temp" onClick={() => session.host('regenerate-temp')}>
                 Replace temporary link
               </button>
             )}
-            <button className="btn" type="button" onClick={() => link && void navigator.clipboard.writeText(link)}>
+            <button
+              className="btn"
+              type="button"
+              data-testid="copy-meeting-link"
+              onClick={() => {
+                if (!link) return
+                void navigator.clipboard.writeText(link).then(() => pushToast('Link copied.'))
+              }}
+            >
               Copy link
             </button>
             <button className="btn ghost" type="button" onClick={() => setDialog('none')}>
@@ -890,7 +912,8 @@ function PersonRow({ info, self, hostActions, onMute, onRemove }: { info: PeerIn
 
 function shareLink(session: RoomSession): string {
   const host = readHost()
-  if (session.self?.isHost && host?.shareUrl) return host.shareUrl
+  const current = visibleShareUrl(session.meeting?.publicUrl, session.self?.isHost ? host?.shareUrl : '')
+  if (current) return current
   const target = readJoinTarget()
   if (!target) return ''
   if (target.tempToken) return `${target.httpBase}/t/${target.tempToken}`

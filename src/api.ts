@@ -114,6 +114,7 @@ export function errorCopy(code: string): string {
     name: 'Enter your name to join.',
     'host-only': 'Only this computer can host a meeting.',
     'weak-password': 'Use at least 8 characters, or generate a password.',
+    'tunnel-unavailable': 'The temporary address could not be created. Check your internet connection, or share a device address instead.',
     forbidden: 'That action is reserved for the host.',
   }
   return copy[code] || 'Something went wrong. Try again.'

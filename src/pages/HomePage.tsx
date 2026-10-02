@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { createMeeting, endMeetingHttp, errorCopy, getMeetingInfo, getSession, updateLinkMode, type InterfaceInfo } from '../api'
+import { loadPrefs, publishPrefs, type Prefs } from '../prefs'
 import { UpdateCard } from './UpdateCard'
+import { SettingsFields } from './SettingsFields'
 import { STRENGTH_LABEL, generatePassword, parseMeetingLink, passwordStrength } from '../../shared/urls'
 import { clearHost, readHost, saveHost, saveJoinTarget, type CreatedView } from '../store'
 
@@ -15,7 +17,8 @@ export function HomePage() {
   const [usePassword, setUsePassword] = useState(false)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [waitingRoom, setWaitingRoom] = useState(false)
+  const [waitingRoom, setWaitingRoom] = useState(() => loadPrefs().waitingRoom)
+  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs())
   const [allowStun, setAllowStun] = useState(false)
   const [linkMode, setLinkMode] = useState<'network' | 'temp'>('network')
   const [address, setAddress] = useState('')
@@ -28,6 +31,7 @@ export function HomePage() {
   const [joinError, setJoinError] = useState('')
   const [copied, setCopied] = useState('')
   const [resume, setResume] = useState(false)
+  const [browserNote, setBrowserNote] = useState('')
 
   useEffect(() => {
     document.title = 'MeetLocal'
@@ -141,25 +145,46 @@ export function HomePage() {
 
   function enter() {
     if (!created) return
-    saveJoinTarget({
-      httpBase: window.location.origin,
-      meetingId: created.linkMode === 'network' ? created.meetingId : undefined,
-      tempToken: created.linkMode === 'temp' ? created.tempToken : undefined,
+    void openMeeting({
+      meetingId: created.meetingId,
+      hostSecret: created.hostSecret,
+      linkMode: created.linkMode,
+      tempToken: created.tempToken,
+      enterPath: created.enterPath,
       title: created.title,
     })
-    navigate(created.enterPath)
   }
 
   function resumeMeeting() {
     const host = readHost()
     if (!host) return
+    void openMeeting(host)
+  }
+
+  async function openMeeting(record: { meetingId: string; hostSecret: string; linkMode: 'network' | 'temp'; tempToken: string; enterPath: string; title: string }) {
+    if (window.meetlocal?.openHostedMeeting) {
+      try {
+        await window.meetlocal.openHostedMeeting(record.meetingId, record.hostSecret)
+        setBrowserNote('The meeting is open in your browser. Keep this window open so the call stays hosted on this computer.')
+        setError('')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not open the browser.')
+      }
+      return
+    }
     saveJoinTarget({
       httpBase: window.location.origin,
-      meetingId: host.linkMode === 'network' ? host.meetingId : undefined,
-      tempToken: host.linkMode === 'temp' ? host.tempToken : undefined,
-      title: host.title,
+      meetingId: record.linkMode === 'network' ? record.meetingId : undefined,
+      tempToken: record.linkMode === 'temp' ? record.tempToken : undefined,
+      title: record.title,
     })
-    navigate(host.enterPath)
+    navigate(record.enterPath)
+  }
+
+  function updatePrefs(next: Prefs) {
+    setPrefs(next)
+    setWaitingRoom(next.waitingRoom)
+    void publishPrefs(next)
   }
 
   function joinExisting() {
@@ -195,7 +220,7 @@ export function HomePage() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          Meet<em>Local</em>
+          <img className="brand-logo" src="/logo.png" alt="MeetLocal" width="180" height="120" />
         </div>
         <span className="pill">Hosted on this computer</span>
       </header>
@@ -408,6 +433,7 @@ export function HomePage() {
                   .
                 </p>
               )}
+              {browserNote && <p className="hint" data-testid="browser-note">{browserNote}</p>}
               <div className="share-bottom">
                 {qr && <img className="qr" src={qr} alt="QR code for the meeting link" />}
                 <div className="modal-actions">
@@ -421,7 +447,7 @@ export function HomePage() {
                     data-path={created.enterPath}
                     onClick={enter}
                   >
-                    Enter meeting
+                    {window.meetlocal?.openHostedMeeting ? 'Open in browser' : 'Enter meeting'}
                   </button>
                 </div>
               </div>
@@ -452,6 +478,11 @@ export function HomePage() {
               Continue
             </button>
           </form>
+          <section className="panel" data-testid="settings-panel">
+            <h2>Settings</h2>
+            <p className="hint">These choices are saved with this app. The browser you open for a meeting uses them too. Font size starts small.</p>
+            <SettingsFields prefs={prefs} onChange={updatePrefs} />
+          </section>
           {fingerprint && !created && (
             <p className="fine">
               This device fingerprint <span className="mono">{fingerprint}</span>

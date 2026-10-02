@@ -204,4 +204,46 @@ describe('meeting server', () => {
     expect(message.publicUrl).not.toMatch(/\d{1,3}(?:\.\d{1,3}){3}/)
     host.close()
   })
+
+  it('opens the host meeting in the browser once and keeps settings on this computer', async () => {
+    const meeting = await create({ title: 'Browser host', linkMode: 'network' })
+    const url = server.openHostBrowser(meeting.meetingId, meeting.hostSecret)
+    expect(url.startsWith(`https://127.0.0.1:${server.port}/h/`)).toBe(true)
+    expect(() => server.openHostBrowser(meeting.meetingId, 'not-the-secret')).toThrow(/not open/)
+    const ticket = url.split('/h/')[1]
+    const first = await fetch(`${base()}/api/tickets/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket }),
+    })
+    expect(first.status).toBe(200)
+    const redeemed = (await first.json()) as { hostSecret: string; enterPath: string; meetingId: string }
+    expect(redeemed.hostSecret).toBe(meeting.hostSecret)
+    expect(redeemed.meetingId).toBe(meeting.meetingId)
+    expect(redeemed.enterPath).toBe(meeting.enterPath)
+    const second = await fetch(`${base()}/api/tickets/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket }),
+    })
+    expect(second.status).toBe(404)
+
+    const saved = await fetch(`${base()}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fontSize: 'large', style: 'contrast', layout: 'speaker', waitingRoom: true, micOn: false }),
+    })
+    expect(saved.status).toBe(200)
+    const read = await fetch(`${base()}/api/settings`)
+    const prefs = (await read.json()) as { fontSize: string; style: string; layout: string; micOn: boolean; waitingRoom: boolean }
+    expect(prefs).toMatchObject({ fontSize: 'large', style: 'contrast', layout: 'speaker', micOn: false, waitingRoom: true })
+    const invalid = await fetch(`${base()}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fontSize: 'huge', style: 'neon' }),
+    })
+    const fallback = (await invalid.json()) as { fontSize: string; style: string }
+    expect(fallback.fontSize).toBe('small')
+    expect(fallback.style).toBe('night')
+  })
 })

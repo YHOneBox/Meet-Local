@@ -106,6 +106,7 @@ export type ServerOptions = {
 export type RunningServer = {
   port: number
   fingerprint: string
+  openHostBrowser: (meetingId: string, hostSecret: string) => string
   close: () => Promise<void>
 }
 
@@ -113,6 +114,7 @@ const meetings = new Map<string, Meeting>()
 const tokens = new Map<string, string>()
 const tombstones = new Map<string, number>()
 const passwordFailures = new Map<string, { count: number; resetAt: number }>()
+const browserTickets = new Map<string, { meetingId: string; expires: number }>()
 let tunnelClose: (() => void) | null = null
 let tunnelBase = ''
 let tunnelOpening: Promise<string> | null = null
@@ -172,6 +174,62 @@ function checkPassword(password: string, stored: string): boolean {
 export function isLoopbackAddress(address: string | undefined): boolean {
   if (!address) return false
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
+}
+
+export type HostSettings = {
+  fontSize: 'small' | 'medium' | 'large'
+  style: 'night' | 'paper' | 'contrast'
+  layout: 'gallery' | 'speaker'
+  mirror: boolean
+  processing: boolean
+  saveData: boolean
+  micOn: boolean
+  camOn: boolean
+  waitingRoom: boolean
+  micId: string
+  camId: string
+  speakerId: string
+}
+
+function clipDeviceId(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.replace(/[^\w:.-]/g, '').slice(0, 180)
+}
+
+export function normalizeHostSettings(raw: unknown): HostSettings {
+  const value = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const fontSize = value.fontSize
+  const style = value.style
+  const layout = value.layout
+  return {
+    fontSize: fontSize === 'medium' || fontSize === 'large' ? fontSize : 'small',
+    style: style === 'paper' || style === 'contrast' ? style : 'night',
+    layout: layout === 'speaker' ? 'speaker' : 'gallery',
+    mirror: value.mirror !== false,
+    processing: value.processing !== false,
+    saveData: value.saveData === true,
+    micOn: value.micOn !== false,
+    camOn: value.camOn !== false,
+    waitingRoom: value.waitingRoom === true,
+    micId: clipDeviceId(value.micId),
+    camId: clipDeviceId(value.camId),
+    speakerId: clipDeviceId(value.speakerId),
+  }
+}
+
+function readHostSettings(dataDir: string | undefined): HostSettings {
+  if (!dataDir) return normalizeHostSettings({})
+  try {
+    return normalizeHostSettings(JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')))
+  } catch {
+    return normalizeHostSettings({})
+  }
+}
+
+function writeHostSettings(dataDir: string | undefined, settings: HostSettings) {
+  if (!dataDir) return
+  fs.mkdirSync(dataDir, { recursive: true })
+  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings), { mode: 0o600 })
 }
 
 export function listInterfaces(): InterfaceRecord[] {
@@ -634,7 +692,7 @@ function readBody(req: Request): Promise<Record<string, unknown>> {
 }
 
 function isSpaPath(pathname: string): boolean {
-  return pathname === '/' || pathname === '/join' || pathname === '/room' || pathname.startsWith('/m/') || pathname.startsWith('/t/')
+  return pathname === '/' || pathname === '/join' || pathname === '/room' || pathname.startsWith('/m/') || pathname.startsWith('/t/') || pathname.startsWith('/h/')
 }
 
 async function sendIndex(
@@ -656,6 +714,7 @@ async function sendIndex(
 export async function startMeetServer(options: ServerOptions = {}): Promise<RunningServer> {
   const dev = Boolean(options.dev)
   const scheme: 'http' | 'https' = options.tls === false ? 'http' : 'https'
+  let hostSettings = readHostSettings(options.dataDir)
   const projectRoot = options.projectRoot ?? process.cwd()
   const staticDir = options.staticDir ?? path.join(projectRoot, 'dist')
   let boundPort = options.port ?? 0
@@ -706,6 +765,64 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, fingerprint: cert.fingerprint })
+  })
+
+  app.get('/api/settings', (_req, res) => {
+    res.json(hostSettings)
+  })
+
+  app.post('/api/settings', async (req, res) => {
+    if (!isLoopbackAddress(req.socket.remoteAddress)) {
+      res.status(403).json({ error: 'host-only' })
+      return
+    }
+    let body: unknown
+    try {
+      body = await readBody(req)
+    } catch {
+      res.status(400).json({ error: 'bad-json' })
+      return
+    }
+    hostSettings = normalizeHostSettings(body)
+    writeHostSettings(options.dataDir, hostSettings)
+    res.json(hostSettings)
+  })
+
+  app.post('/api/tickets/redeem', async (req, res) => {
+    if (!isLoopbackAddress(req.socket.remoteAddress)) {
+      res.status(403).json({ error: 'host-only' })
+      return
+    }
+    let body: Record<string, unknown>
+    try {
+      body = await readBody(req)
+    } catch {
+      res.status(400).json({ error: 'bad-json' })
+      return
+    }
+    const ticket = typeof body.ticket === 'string' ? body.ticket : ''
+    const record = browserTickets.get(ticket)
+    browserTickets.delete(ticket)
+    if (!record || record.expires < Date.now()) {
+      res.status(404).json({ error: 'expired' })
+      return
+    }
+    const meeting = meetings.get(record.meetingId)
+    if (!meeting) {
+      res.status(404).json({ error: 'not-found' })
+      return
+    }
+    const links = shareLinks(meeting, boundPort, scheme)
+    res.json({
+      meetingId: meeting.id,
+      tempToken: meeting.tempToken,
+      hostSecret: meeting.hostSecret,
+      linkMode: meeting.linkMode,
+      enterPath: enterPath(meeting),
+      title: meeting.title,
+      fingerprint: cert.fingerprint,
+      shareUrl: links[0]?.url || '',
+    })
   })
 
   app.get('/api/session', (req, res) => {
@@ -933,9 +1050,22 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
   })
   boundPort = port
 
+  function openHostBrowser(meetingId: string, hostSecret: string): string {
+    const meeting = meetings.get(meetingId)
+    if (!meeting || !hostGuard(meeting, hostSecret)) throw new Error('This meeting is not open on this computer.')
+    const now = Date.now()
+    for (const [key, ticket] of browserTickets) {
+      if (ticket.expires < now) browserTickets.delete(key)
+    }
+    const ticket = randomBytes(32).toString('hex')
+    browserTickets.set(ticket, { meetingId, expires: now + 90_000 })
+    return `${scheme}://127.0.0.1:${boundPort}/h/${ticket}`
+  }
+
   return {
     port,
     fingerprint: cert.fingerprint,
+    openHostBrowser,
     close: async () => {
       clearInterval(heartbeat)
       for (const meeting of [...meetings.values()]) endMeeting(meeting)
@@ -943,6 +1073,7 @@ export async function startMeetServer(options: ServerOptions = {}): Promise<Runn
       tokens.clear()
       tombstones.clear()
       passwordFailures.clear()
+      browserTickets.clear()
       releasePublicTunnel()
       await new Promise<void>((resolve) => wss.close(() => resolve()))
       await new Promise<void>((resolve) => server.close(() => resolve()))

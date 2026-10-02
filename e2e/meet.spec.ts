@@ -272,3 +272,25 @@ test('an available GitHub release shows its changelog and versioned download', a
   await page.getByTestId('update-download').click()
   await expect(page.getByTestId('update-ready')).toContainText('MeetLocal-1.2.0-windows-x64.exe')
 })
+
+test('font starts small and the meeting keeps a chosen style', async ({ page }) => {
+  try {
+    await page.goto('/')
+    await expect(page.getByTestId('settings-font')).toHaveValue('small')
+    await page.getByTestId('settings-style').selectOption('paper')
+    await expect(page.locator('html')).toHaveAttribute('data-style', 'paper')
+    await page.getByTestId('settings-font').selectOption('large')
+    await expect(page.locator('html')).toHaveAttribute('data-font', 'large')
+    await createMeeting(page, {})
+    await page.getByTestId('enter-meeting').click()
+    await joinLobby(page, 'Alex Host')
+    await expect(page.locator('.room').last()).toHaveClass(/style-paper/)
+    await page.getByTestId('room-style').selectOption('contrast')
+    await expect(page.locator('.room').last()).toHaveClass(/style-contrast/)
+    await expect(page.locator('html')).toHaveAttribute('data-font', 'large')
+  } finally {
+    await page.goto('/')
+    await page.getByTestId('settings-font').selectOption('small')
+    await page.getByTestId('settings-style').selectOption('night')
+  }
+})

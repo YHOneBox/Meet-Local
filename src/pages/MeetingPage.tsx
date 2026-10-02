@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { REACTIONS } from '../../shared/protocol'
 import type { PeerInfo } from '../../shared/protocol'
 import QRCode from 'qrcode'
-import { loadPrefs, savePrefs, type Prefs } from '../prefs'
+import { loadPrefs, publishPrefs, type Prefs } from '../prefs'
 import { MeetingRecorder, saveRecording } from '../recording'
 import { RoomSession, openDevices, type PeerView } from '../session'
 import { ScreenPicker } from '../meeting/ScreenPicker'
+import { SettingsFields } from './SettingsFields'
 import { clearHost, readHost, readJoinTarget, takeHandoff } from '../store'
 import { visibleShareUrl } from '../../shared/urls'
 import { Avatar, Icon, MediaView, useSpeaking } from '../ui'
@@ -23,7 +24,7 @@ export function MeetingPage() {
   const [reactions, setReactions] = useState<{ id: string; fromName: string; emoji: string }[]>([])
   const [panel, setPanel] = useState<Panel>('none')
   const [dialog, setDialog] = useState<Dialog>('none')
-  const [layout, setLayout] = useState<'gallery' | 'speaker'>('gallery')
+  const [layout, setLayout] = useState<Prefs['layout']>(() => loadPrefs().layout)
   const [pinned, setPinned] = useState('')
   const [unread, setUnread] = useState(0)
   const [draft, setDraft] = useState('')
@@ -219,7 +220,7 @@ export function MeetingPage() {
   async function changeDevice(kind: 'mic' | 'cam', deviceId: string) {
     const next = { ...prefs, [kind === 'mic' ? 'micId' : 'camId']: deviceId }
     setPrefs(next)
-    savePrefs(next)
+    void publishPrefs(next)
     const current = sessionRef.current
     if (!current) return
     const stream = await openDevices({
@@ -293,7 +294,7 @@ export function MeetingPage() {
   const hostRecord = session.self?.isHost ? readHost() : null
 
   return (
-    <div className={idle ? 'room idle' : 'room'}>
+    <div className={idle ? `room idle style-${prefs.style}` : `room style-${prefs.style}`}>
       <header className="room-top">
         <div>
           <strong data-testid="meeting-title">{session.meeting?.title || handoff.title}</strong>
@@ -306,6 +307,22 @@ export function MeetingPage() {
               Rec {formatClock(now - recordFrom)}
             </span>
           )}
+          <label className="style-inline">
+            <span>Style</span>
+            <select
+              data-testid="room-style"
+              value={prefs.style}
+              onChange={(event) => {
+                const next = { ...prefs, style: event.target.value as Prefs['style'] }
+                setPrefs(next)
+                void publishPrefs(next)
+              }}
+            >
+              <option value="night">Night</option>
+              <option value="paper">Paper</option>
+              <option value="contrast">High contrast</option>
+            </select>
+          </label>
           <span className="pill subtle" title="Audio and video are encrypted between the people in the call.">
             Encrypted
           </span>
@@ -650,7 +667,7 @@ export function MeetingPage() {
                 onChange={(event) => {
                   const next = { ...prefs, speakerId: event.target.value }
                   setPrefs(next)
-                  savePrefs(next)
+                  void publishPrefs(next)
                 }}
               >
                 <option value="">System default</option>
@@ -659,43 +676,14 @@ export function MeetingPage() {
                 ))}
               </select>
             </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={prefs.mirror}
-                onChange={(event) => {
-                  const next = { ...prefs, mirror: event.target.checked }
-                  setPrefs(next)
-                  savePrefs(next)
-                }}
-              />
-              Mirror my camera
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={prefs.processing}
-                onChange={(event) => {
-                  const next = { ...prefs, processing: event.target.checked }
-                  setPrefs(next)
-                  savePrefs(next)
-                }}
-              />
-              Echo cancellation, noise suppression, and auto gain
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={prefs.saveData}
-                data-testid="settings-save-data"
-                onChange={(event) => {
-                  const next = { ...prefs, saveData: event.target.checked }
-                  setPrefs(next)
-                  savePrefs(next)
-                }}
-              />
-              Lower video quality to save bandwidth
-            </label>
+            <SettingsFields
+              prefs={prefs}
+              onChange={(next) => {
+                setPrefs(next)
+                setLayout(next.layout)
+                void publishPrefs(next)
+              }}
+            />
             <button className="btn" type="button" onClick={() => setDialog('none')}>
               Done
             </button>

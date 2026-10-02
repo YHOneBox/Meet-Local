@@ -27,6 +27,7 @@ app.setAppUserModelId('com.meetlocal.app')
 
 let mainWindow: BrowserWindow | null = null
 let stopServer: (() => Promise<void>) | null = null
+let openHostBrowser: ((meetingId: string, hostSecret: string) => string) | null = null
 const trustedCertificates = new Set<string>()
 
 function trustKey(host: string, fingerprint: string) {
@@ -52,6 +53,7 @@ async function createWindow() {
     dataDir,
   })
   stopServer = running.close
+  openHostBrowser = running.openHostBrowser
   trustedCertificates.add(trustKey('127.0.0.1', running.fingerprint))
   trustedCertificates.add(trustKey('localhost', running.fingerprint))
 
@@ -80,10 +82,10 @@ async function createWindow() {
   })
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 840,
-    minWidth: 980,
-    minHeight: 680,
+    width: 460,
+    height: 720,
+    minWidth: 400,
+    minHeight: 560,
     title: 'MeetLocal',
     backgroundColor: '#f3efe6',
     autoHideMenuBar: true,
@@ -136,6 +138,14 @@ ipcMain.handle('save-file', async (_event, payload: { bytes: Uint8Array; filenam
   if (result.canceled || !result.filePath) return { canceled: true }
   await fs.writeFile(result.filePath, Buffer.from(payload.bytes))
   return { canceled: false, filePath: result.filePath }
+})
+
+ipcMain.handle('host:open', async (_event, payload: { meetingId?: string; hostSecret?: string }) => {
+  if (!openHostBrowser) throw new Error('The meeting service is not running.')
+  const meetingId = typeof payload?.meetingId === 'string' ? payload.meetingId : ''
+  const hostSecret = typeof payload?.hostSecret === 'string' ? payload.hostSecret : ''
+  const url = openHostBrowser(meetingId, hostSecret)
+  await shell.openExternal(url)
 })
 
 ipcMain.handle('updates:check', () => checkForUpdate())

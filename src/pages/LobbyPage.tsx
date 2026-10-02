@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { errorCopy, getMeetingInfo, type MeetingInfo } from '../api'
-import { loadPrefs, savePrefs, type Prefs } from '../prefs'
+import { loadPrefs, publishPrefs, type Prefs } from '../prefs'
 import { openDevices } from '../session'
 import { hostMatches, readHost, rememberName, savedName, saveJoinTarget, setHandoff, type JoinTarget } from '../store'
 import { parseMeetingLink } from '../../shared/urls'
@@ -18,8 +18,8 @@ export function LobbyPage() {
   const [name, setName] = useState(savedName())
   const [password, setPassword] = useState('')
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs())
-  const [micOn, setMicOn] = useState(true)
-  const [camOn, setCamOn] = useState(true)
+  const [micOn, setMicOn] = useState(() => loadPrefs().micOn)
+  const [camOn, setCamOn] = useState(() => loadPrefs().camOn)
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [mediaError, setMediaError] = useState('')
@@ -147,7 +147,7 @@ export function LobbyPage() {
   function updatePrefs(next: Partial<Prefs>) {
     const value = { ...prefs, ...next }
     setPrefs(value)
-    savePrefs(value)
+    void publishPrefs(value)
   }
 
   function join() {

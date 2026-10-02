@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { HomePage } from './pages/HomePage'
+import { HostHandoff } from './pages/HostHandoff'
 import { LobbyPage } from './pages/LobbyPage'
 import { MeetingPage } from './pages/MeetingPage'
 
@@ -10,6 +11,7 @@ export function App() {
       <Theme />
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/h/:ticket" element={<HostHandoff />} />
         <Route path="/m/:meetingId" element={<LobbyPage />} />
         <Route path="/t/:token" element={<LobbyPage />} />
         <Route path="/join" element={<LobbyPage />} />

@@ -69,6 +69,7 @@ export function UpdateCard() {
   const [downloaded, setDownloaded] = useState<{ fileName: string; version: string } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     if (!desktop?.checkForUpdate) return
@@ -116,10 +117,10 @@ export function UpdateCard() {
 
   return (
     <>
-      {info?.updateAvailable && !downloaded && (
+      {info?.updateAvailable && !downloaded && !dismissed && (
         <div className="banner-card update-card" data-testid="update-banner">
           <div>
-            <strong>MeetLocal {info.latestVersion} is available</strong>
+            <strong>Update to {info.latestVersion}?</strong>
             <p>
               You are on {version}. The download keeps the version in the file name
               {info.assetName ? `: ${info.assetName}` : ''}.
@@ -134,6 +135,9 @@ export function UpdateCard() {
           <div className="modal-actions">
             <button className="btn ghost" type="button" data-testid="update-notes" onClick={() => setNotesFor('update')}>
               See changes
+            </button>
+            <button className="btn ghost" type="button" data-testid="update-later" onClick={() => setDismissed(true)}>
+              Not now
             </button>
             <button className="btn primary" type="button" data-testid="update-download" disabled={busy} onClick={() => void download()}>
               {busy ? (progress?.total ? `${percent}%` : 'Downloading…') : `Download${info.assetSize ? ` ${formatSize(info.assetSize)}` : ''}`}
@@ -157,7 +161,7 @@ export function UpdateCard() {
           </div>
         </div>
       )}
-      {!info?.updateAvailable && (
+      {(!info?.updateAvailable || dismissed) && !downloaded && (
         <div className="version-row">
           <span>Version {version}</span>
           {info?.currentNotes && (

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('meetlocal', {
   trustCertificate: (host: string, fingerprint: string) => ipcRenderer.invoke('certificate:trust', { host, fingerprint }),
   openHostedMeeting: (meetingId: string, hostSecret: string) => ipcRenderer.invoke('host:open', { meetingId, hostSecret }),
   openLink: (pageUrl: string) => ipcRenderer.invoke('shell:open', pageUrl),
+  setCaptureIntent: (intent: { sourceId: string; audio: boolean } | null) => ipcRenderer.invoke('capture:intent', intent),
   onUpdateProgress: (callback: (progress: { received: number; total: number }) => void) => {
     const listener = (_event: unknown, progress: { received: number; total: number }) => callback(progress)
     ipcRenderer.on('update-progress', listener)

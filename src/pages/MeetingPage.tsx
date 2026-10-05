@@ -354,7 +354,10 @@ export function MeetingPage() {
                 {localSharing ? (
                   <MediaView stream={session.screenStream} muted fit="contain" recordLabel="Your screen" />
                 ) : sharer ? (
-                  <MediaView stream={sharer.screen} version={sharer.mediaVersion} fit="contain" recordLabel={`${sharer.info.name} screen`} speakerId={prefs.speakerId} />
+                  <>
+                    <MediaView stream={sharer.screen} version={sharer.mediaVersion} muted fit="contain" recordLabel={`${sharer.info.name} screen`} speakerId={prefs.speakerId} />
+                    <StreamAudio stream={sharer.screen} version={sharer.mediaVersion} speakerId={prefs.speakerId} />
+                  </>
                 ) : null}
                 <span className="namebar">{localSharing ? 'Your screen' : `${sharer?.info.name ?? 'Guest'} is presenting`}</span>
               </div>
@@ -932,6 +935,19 @@ function shareLink(session: RoomSession): string {
   if (target.tempToken) return `${target.httpBase}/t/${target.tempToken}`
   if (target.meetingId) return `${target.httpBase}/m/${target.meetingId}`
   return ''
+}
+
+function StreamAudio({ stream, version, speakerId }: { stream: MediaStream; version: number; speakerId: string }) {
+  const ref = useRef<HTMLAudioElement>(null)
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    element.srcObject = stream
+    void element.play().catch(() => undefined)
+    const sink = element as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }
+    if (speakerId && sink.setSinkId) void sink.setSinkId(speakerId).catch(() => undefined)
+  }, [stream, version, speakerId])
+  return <audio ref={ref} autoPlay data-testid="screen-audio" />
 }
 
 function columns(count: number): number {

@@ -16,6 +16,7 @@ type Link = {
   audio: RTCRtpTransceiver | null
   camera: RTCRtpTransceiver | null
   screen: RTCRtpTransceiver | null
+  screenAudio: RTCRtpTransceiver | null
   polite: boolean
   canOffer: boolean
   makingOffer: boolean
@@ -88,6 +89,7 @@ export class RoomSession {
   private closed = false
   private retries = 0
   private screenTrack: MediaStreamTrack | null = null
+  private screenAudioTrack: MediaStreamTrack | null = null
   private allowStun = true
   private password: string
   private hostSecret?: string
@@ -190,26 +192,39 @@ export class RoomSession {
     this.stopScreenTracks()
     const track = stream.getVideoTracks()[0]
     if (!track) return
+    const audioTrack = stream.getAudioTracks()[0] ?? null
     track.contentHint = 'detail'
     track.onended = () => {
       void this.stopScreen()
     }
     this.screenTrack = track
+    this.screenAudioTrack = audioTrack
     this.screenStream = stream
+    const pending: Promise<void>[] = []
     for (const link of this.links.values()) {
       link.canOffer = true
       if (!link.screen) link.screen = link.pc.addTransceiver(track, { direction: 'sendrecv' })
-      else await link.screen.sender.replaceTrack(track)
+      else pending.push(link.screen.sender.replaceTrack(track).then(() => undefined))
+      if (audioTrack) {
+        if (!link.screenAudio) link.screenAudio = link.pc.addTransceiver(audioTrack, { direction: 'sendrecv' })
+        else pending.push(link.screenAudio.sender.replaceTrack(audioTrack).then(() => undefined))
+      } else if (link.screenAudio) {
+        pending.push(link.screenAudio.sender.replaceTrack(null).then(() => undefined))
+      }
     }
+    await Promise.all(pending)
     this.pushState()
     this.emit()
   }
 
   async stopScreen() {
     this.stopScreenTracks()
+    const pending: Promise<void>[] = []
     for (const link of this.links.values()) {
-      if (link.screen) await link.screen.sender.replaceTrack(null)
+      if (link.screen) pending.push(link.screen.sender.replaceTrack(null).then(() => undefined))
+      if (link.screenAudio) pending.push(link.screenAudio.sender.replaceTrack(null).then(() => undefined))
     }
+    await Promise.all(pending)
     this.pushState()
     this.emit()
   }
@@ -249,8 +264,10 @@ export class RoomSession {
 
   private stopScreenTracks() {
     this.screenTrack?.stop()
+    this.screenAudioTrack?.stop()
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenTrack = null
+    this.screenAudioTrack = null
     this.screenStream = null
   }
 
@@ -444,6 +461,7 @@ export class RoomSession {
       audio: null,
       camera: null,
       screen: null,
+      screenAudio: null,
       polite: this.selfId < peerId,
       canOffer: initialOfferer,
       makingOffer: false,
@@ -522,6 +540,7 @@ export class RoomSession {
       link.audio = pc.addTransceiver('audio', { direction: 'sendrecv' })
       link.camera = pc.addTransceiver('video', { direction: 'sendrecv' })
       if (this.screenTrack) link.screen = pc.addTransceiver(this.screenTrack, { direction: 'sendrecv' })
+      if (this.screenAudioTrack) link.screenAudio = pc.addTransceiver(this.screenAudioTrack, { direction: 'sendrecv' })
       void this.sendLocalTracks(link).then(() => {
         link.canOffer = true
         void negotiate()
@@ -532,6 +551,13 @@ export class RoomSession {
   private placeRemoteTrack(link: Link, event: RTCTrackEvent) {
     const track = event.track
     if (track.kind === 'audio') {
+      const audios = link.pc.getTransceivers().filter((item) => item.receiver.track?.kind === 'audio')
+      const index = audios.findIndex((item) => item === event.transceiver)
+      if (index > 0) {
+        link.screenAudio = event.transceiver
+        this.putTrack(link.screenStream, track)
+        return
+      }
       this.putTrack(link.audioStream, track)
       return
     }
@@ -547,9 +573,14 @@ export class RoomSession {
 
   private async sendLocalTracks(link: Link) {
     const transceivers = link.pc.getTransceivers()
-    if (!link.audio) link.audio = transceivers.find((item) => item.receiver.track?.kind === 'audio' || item.sender.track?.kind === 'audio') ?? null
+    if (!link.audio) {
+      link.audio =
+        transceivers.find(
+          (item) => item !== link.screen && item !== link.screenAudio && (item.receiver.track?.kind === 'audio' || item.sender.track?.kind === 'audio'),
+        ) ?? null
+    }
     if (!link.camera) {
-      link.camera = transceivers.find((item) => item.receiver.track?.kind === 'video' || item.sender.track?.kind === 'video') ?? null
+      link.camera = transceivers.find((item) => item !== link.screen && (item.receiver.track?.kind === 'video' || item.sender.track?.kind === 'video')) ?? null
     }
     const mic = this.micOn ? this.localStream.getAudioTracks()[0] ?? null : null
     const cam = this.camOn ? this.localStream.getVideoTracks()[0] ?? null : null
@@ -565,7 +596,7 @@ export class RoomSession {
 
   private putTrack(stream: MediaStream, track: MediaStreamTrack) {
     for (const existing of stream.getTracks()) {
-      if (existing.id !== track.id) stream.removeTrack(existing)
+      if (existing.kind === track.kind && existing.id !== track.id) stream.removeTrack(existing)
     }
     if (!stream.getTrackById(track.id)) stream.addTrack(track)
   }

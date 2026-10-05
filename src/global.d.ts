@@ -37,6 +37,7 @@ export type MeetLocalApi = {
   trustCertificate: (host: string, fingerprint: string) => Promise<void>
   openHostedMeeting: (meetingId: string, hostSecret: string) => Promise<void>
   openLink: (pageUrl: string) => Promise<void>
+  setCaptureIntent: (intent: { sourceId: string; audio: boolean } | null) => Promise<void>
   onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void
 }
 

@@ -29,6 +29,7 @@ let mainWindow: BrowserWindow | null = null
 let stopServer: (() => Promise<void>) | null = null
 let openHostBrowser: ((meetingId: string, hostSecret: string) => string) | null = null
 const trustedCertificates = new Set<string>()
+let captureIntent: { sourceId: string; audio: boolean } | null = null
 
 function trustKey(host: string, fingerprint: string) {
   return `${host.toLowerCase()}:${fingerprint}`
@@ -72,14 +73,19 @@ async function createWindow() {
     callback(allowed.has(permission))
   })
 
-  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
-    const sources = await desktopCapturer.getSources({ types: ['screen'] })
-    if (!sources[0]) {
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const intent = captureIntent
+    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
+    const source = intent?.sourceId ? sources.find((item) => item.id === intent.sourceId) : sources[0]
+    if (!source) {
       callback({})
       return
     }
-    callback({ video: sources[0] })
-  })
+    callback({
+      video: source,
+      audio: request.audioRequested && intent?.audio && process.platform === 'win32' ? 'loopback' : undefined,
+    })
+  }, { useSystemPicker: true })
 
   mainWindow = new BrowserWindow({
     width: 360,
@@ -110,6 +116,14 @@ async function createWindow() {
     mainWindow = null
   })
 }
+
+ipcMain.handle('capture:intent', (_event, intent: { sourceId?: string; audio?: boolean } | null) => {
+  if (!intent || typeof intent.sourceId !== 'string' || !intent.sourceId) {
+    captureIntent = null
+    return
+  }
+  captureIntent = { sourceId: intent.sourceId, audio: Boolean(intent.audio) }
+})
 
 ipcMain.handle('desktop-sources', async () => {
   const sources = await desktopCapturer.getSources({

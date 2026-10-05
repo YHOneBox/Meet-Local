@@ -3,6 +3,14 @@ import type { DesktopSource } from '../global'
 
 export async function captureScreen(source?: DesktopSource, withAudio = false, surface?: 'monitor' | 'window' | 'browser'): Promise<MediaStream> {
   if (source && window.meetlocal?.isDesktop) {
+    if (withAudio && window.meetlocal.platform === 'win32') {
+      await window.meetlocal.setCaptureIntent({ sourceId: source.id, audio: true })
+      try {
+        return await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      } finally {
+        await window.meetlocal.setCaptureIntent(null)
+      }
+    }
     const video = {
       mandatory: {
         chromeMediaSource: 'desktop',
@@ -17,7 +25,7 @@ export async function captureScreen(source?: DesktopSource, withAudio = false, s
     } as unknown as MediaStreamConstraints)
   }
   const video: MediaTrackConstraints = { frameRate: 30 }
-  if (surface) video.displaySurface = surface
+  if (surface === 'browser') video.displaySurface = 'browser'
   return navigator.mediaDevices.getDisplayMedia({
     video,
     audio: withAudio,
@@ -33,7 +41,7 @@ export function ScreenPicker({
 }) {
   const desktop = Boolean(window.meetlocal?.isDesktop)
   const [sources, setSources] = useState<DesktopSource[]>([])
-  const [tab, setTab] = useState<'screen' | 'window'>('screen')
+  const [tab, setTab] = useState<'screen' | 'window' | 'browser'>('screen')
   const [selected, setSelected] = useState('')
   const [audio, setAudio] = useState(false)
   const [error, setError] = useState('')
@@ -64,15 +72,23 @@ export function ScreenPicker({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const visible = sources.filter((item) => item.kind === tab)
+  const visible = sources.filter((item) => item.kind === (tab === 'screen' ? 'screen' : 'window'))
   const chosen = sources.find((item) => item.id === selected)
 
+  function showKind(next: 'screen' | 'window' | 'browser') {
+    setTab(next)
+    if (next === 'browser') setAudio(true)
+    const first = sources.find((item) => item.kind === (next === 'screen' ? 'screen' : 'window'))
+    if (first) setSelected(first.id)
+  }
+
   async function share(surface?: 'monitor' | 'window' | 'browser') {
-    if (desktop && !chosen) return
+    const wantAudio = !desktop || surface === 'browser' || tab === 'browser' ? true : audio
+    if (desktop && surface !== 'browser' && !chosen) return
     setBusy(true)
     setError('')
     try {
-      const stream = await captureScreen(desktop ? chosen : undefined, audio, surface)
+      const stream = await captureScreen(desktop && surface !== 'browser' ? chosen : undefined, wantAudio, surface)
       onShare(stream)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Screen sharing was cancelled.')
@@ -89,14 +105,20 @@ export function ScreenPicker({
         <h2 id="share-title">What do you want to share?</h2>
         {desktop ? (
           <>
-            <div className="segmented" role="tablist">
-              <button type="button" className={tab === 'screen' ? 'active' : ''} onClick={() => setTab('screen')} data-testid="tab-screens">
-                Entire screen
+            <div className="segmented three" role="tablist">
+              <button type="button" className={tab === 'screen' ? 'active' : ''} onClick={() => showKind('screen')} data-testid="tab-screens">
+                Screen
               </button>
-              <button type="button" className={tab === 'window' ? 'active' : ''} onClick={() => setTab('window')} data-testid="tab-windows">
-                A window
+              <button type="button" className={tab === 'window' ? 'active' : ''} onClick={() => showKind('window')} data-testid="tab-windows">
+                Window
+              </button>
+              <button type="button" className={tab === 'browser' ? 'active' : ''} onClick={() => showKind('browser')} data-testid="tab-browser">
+                Tab
               </button>
             </div>
+            {tab === 'browser' && (
+              <p className="hint">Pick the browser window that has the tab. Sound playing on this computer is shared, so the tab can be heard. Headphones keep the call from echoing.</p>
+            )}
             <div className="source-grid">
               {visible.length === 0 && <p className="hint">Nothing is available on this tab.</p>}
               {visible.map((source) => (
@@ -126,14 +148,18 @@ export function ScreenPicker({
             </button>
             <button type="button" data-testid="share-choice-tab" disabled={busy} onClick={() => void share('browser')}>
               <strong>A browser tab</strong>
-              <span>Show one tab</span>
+              <span>Show one tab and its sound</span>
             </button>
           </div>
         )}
-        <label className="check">
-          <input type="checkbox" checked={audio} onChange={(event) => setAudio(event.target.checked)} />
-          Share system audio with the screen
-        </label>
+        {desktop ? (
+          <label className="check">
+            <input type="checkbox" checked={audio || tab === 'browser'} onChange={(event) => setAudio(event.target.checked)} disabled={tab === 'browser'} />
+            Share sound playing on this computer
+          </label>
+        ) : (
+          <p className="hint">The browser then lets you pick a screen, window, or tab. Allow tab audio in that prompt so other people can hear the tab.</p>
+        )}
         {error && <p className="error">{error}</p>}
         <footer className="modal-actions">
           <button className="btn ghost" type="button" onClick={onClose}>

@@ -107,9 +107,18 @@ function request(url: string, headers: Record<string, string>): Promise<http.Inc
   })
 }
 
-async function readJson(url: string): Promise<GithubRelease | null> {
+async function readJson(url: string, redirects = 0): Promise<GithubRelease | null> {
   const response = await request(url, {})
-  if (response.statusCode === 404) {
+  const status = response.statusCode || 0
+  if (status >= 300 && status < 400 && response.headers.location && redirects < 3) {
+    response.resume()
+    const next = new URL(response.headers.location, url).toString()
+    if (!next.startsWith('https://api.github.com/') && !isAllowedDownloadHost(next)) {
+      throw new Error('The update check was redirected somewhere unexpected.')
+    }
+    return readJson(next, redirects + 1)
+  }
+  if (status === 404) {
     response.resume()
     return null
   }
@@ -169,7 +178,10 @@ export async function checkForUpdate(platform = process.platform, arch = process
   }
   try {
     const latest = await readJson(releasesApi('latest'))
-    if (!latest?.tag_name) return info
+    if (!latest?.tag_name) {
+      info.message = "You're up to date."
+      return info
+    }
     const latestVersion = latest.tag_name.replace(/^v/i, '')
     const newer = compareVersions(currentVersion, latestVersion) < 0
     if (newer) {
@@ -188,8 +200,11 @@ export async function checkForUpdate(platform = process.platform, arch = process
       info.currentNotes = info.notes
       info.currentNotesName = info.name
       info.updateAvailable = false
+      info.message = `You're up to date.`
       await rememberNotes(currentVersion, info.name, info.notes)
     } else {
+      info.latestVersion = latestVersion
+      info.message = `You're on ${currentVersion}. The newest release is ${latestVersion}.`
       const tagged = await readJson(releasesApi('tag', `v${currentVersion}`)).catch(() => null)
       if (tagged?.body) {
         info.currentNotes = tagged.body

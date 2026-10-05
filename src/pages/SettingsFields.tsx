@@ -44,8 +44,9 @@ export function SettingsFields({ prefs, onChange }: { prefs: Prefs; onChange: (n
           <label className="field">
             <span>Default view</span>
             <select data-testid="settings-layout" value={prefs.layout} onChange={(event) => set('layout', event.target.value as Prefs['layout'])}>
-              <option value="gallery">Gallery</option>
-              <option value="speaker">Speaker</option>
+              <option value="gallery">Google Meet</option>
+              <option value="speaker">Zoom</option>
+              <option value="sidebar">Discord</option>
             </select>
           </label>
         </>

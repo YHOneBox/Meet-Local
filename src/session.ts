@@ -539,8 +539,8 @@ export class RoomSession {
       link.canOffer = false
       link.audio = pc.addTransceiver('audio', { direction: 'sendrecv' })
       link.camera = pc.addTransceiver('video', { direction: 'sendrecv' })
-      if (this.screenTrack) link.screen = pc.addTransceiver(this.screenTrack, { direction: 'sendrecv' })
-      if (this.screenAudioTrack) link.screenAudio = pc.addTransceiver(this.screenAudioTrack, { direction: 'sendrecv' })
+      link.screen = pc.addTransceiver(this.screenTrack ?? 'video', { direction: 'sendrecv' })
+      link.screenAudio = pc.addTransceiver(this.screenAudioTrack ?? 'audio', { direction: 'sendrecv' })
       void this.sendLocalTracks(link).then(() => {
         link.canOffer = true
         void negotiate()
@@ -571,17 +571,18 @@ export class RoomSession {
     this.putTrack(link.cameraStream, track)
   }
 
-  private async sendLocalTracks(link: Link) {
+  private bindMedia(link: Link) {
     const transceivers = link.pc.getTransceivers()
-    if (!link.audio) {
-      link.audio =
-        transceivers.find(
-          (item) => item !== link.screen && item !== link.screenAudio && (item.receiver.track?.kind === 'audio' || item.sender.track?.kind === 'audio'),
-        ) ?? null
-    }
-    if (!link.camera) {
-      link.camera = transceivers.find((item) => item !== link.screen && (item.receiver.track?.kind === 'video' || item.sender.track?.kind === 'video')) ?? null
-    }
+    const videos = transceivers.filter((item) => item.receiver.track?.kind === 'video' || item.sender.track?.kind === 'video')
+    const audios = transceivers.filter((item) => item.receiver.track?.kind === 'audio' || item.sender.track?.kind === 'audio')
+    if (!link.audio && audios[0]) link.audio = audios[0]
+    if (!link.screenAudio && audios[1]) link.screenAudio = audios[1]
+    if (!link.camera && videos[0]) link.camera = videos[0]
+    if (!link.screen && videos[1]) link.screen = videos[1]
+  }
+
+  private async sendLocalTracks(link: Link) {
+    this.bindMedia(link)
     const mic = this.micOn ? this.localStream.getAudioTracks()[0] ?? null : null
     const cam = this.camOn ? this.localStream.getVideoTracks()[0] ?? null : null
     if (link.audio) {
@@ -591,6 +592,14 @@ export class RoomSession {
     if (link.camera) {
       link.camera.direction = 'sendrecv'
       await link.camera.sender.replaceTrack(cam)
+    }
+    if (link.screen) {
+      link.screen.direction = 'sendrecv'
+      if (link.screen.sender.track !== this.screenTrack) await link.screen.sender.replaceTrack(this.screenTrack)
+    }
+    if (link.screenAudio) {
+      link.screenAudio.direction = 'sendrecv'
+      if (link.screenAudio.sender.track !== this.screenAudioTrack) await link.screenAudio.sender.replaceTrack(this.screenAudioTrack)
     }
   }
 

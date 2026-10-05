@@ -8,6 +8,7 @@ import { MeetingRecorder, saveRecording } from '../recording'
 import { RoomSession, openDevices, type PeerView } from '../session'
 import { ScreenPicker } from '../meeting/ScreenPicker'
 import { SettingsFields } from './SettingsFields'
+import { UpdateCard } from './UpdateCard'
 import { clearHost, readHost, readJoinTarget, takeHandoff } from '../store'
 import { visibleShareUrl } from '../../shared/urls'
 import { Avatar, Icon, MediaView, useSpeaking } from '../ui'
@@ -25,6 +26,8 @@ export function MeetingPage() {
   const [panel, setPanel] = useState<Panel>('none')
   const [dialog, setDialog] = useState<Dialog>('none')
   const [layout, setLayout] = useState<Prefs['layout']>(() => loadPrefs().layout)
+  const [controlsOn, setControlsOn] = useState(true)
+  const [stripSize, setStripSize] = useState(104)
   const [pinned, setPinned] = useState('')
   const [unread, setUnread] = useState(0)
   const [draft, setDraft] = useState('')
@@ -294,16 +297,46 @@ export function MeetingPage() {
   }
 
   const peers = [...session.peers.values()]
-  const sharer = peers.find((peer) => peer.screen.getVideoTracks().some((track) => track.readyState === 'live'))
+  const sharer = peers.find((peer) => peer.info.sharing)
   const localSharing = Boolean(session.screenStream)
   const presenting = localSharing || Boolean(sharer)
   const peopleCount = peers.length + 1
   const hands = peers.filter((peer) => peer.info.raised).length + (session.raised ? 1 : 0)
   const link = shareLink(session)
   const hostRecord = session.self?.isHost ? readHost() : null
+  const focusedPeer = peers.find((peer) => peer.info.id === pinned) || peers.find((peer) => peer.info.mic) || peers[0]
+  const selfOnStage = !presenting && layout !== 'gallery' && (pinned === 'self' || !focusedPeer)
+  const separatePeople = presenting || layout !== 'gallery'
+  const sidebar = separatePeople && layout === 'sidebar'
+
+  function chooseLayout(next: Prefs['layout']) {
+    setLayout(next)
+    if (next === 'sidebar') setStripSize((size) => (size < 140 ? 220 : size))
+    const nextPrefs = { ...prefs, layout: next }
+    setPrefs(nextPrefs)
+    void publishPrefs(nextPrefs)
+  }
+
+  function startResize(event: React.PointerEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    const horizontal = sidebar && window.matchMedia('(min-width: 981px)').matches
+    const origin = horizontal ? event.clientX : event.clientY
+    const initial = stripSize
+    const move = (ev: PointerEvent) => {
+      const delta = origin - (horizontal ? ev.clientX : ev.clientY)
+      const next = horizontal ? Math.min(420, Math.max(140, initial + delta)) : Math.min(280, Math.max(72, initial + delta))
+      setStripSize(next)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
 
   return (
-    <div className={idle ? `room idle style-${prefs.style}` : `room style-${prefs.style}`}>
+    <div className={`${idle && controlsOn ? `room idle style-${prefs.style}` : `room style-${prefs.style}`}${controlsOn ? '' : ' chrome-hidden'}${sidebar ? ' layout-sidebar' : ''}`}>
       <header className="room-top">
         <div>
           <strong data-testid="meeting-title">{session.meeting?.title || handoff.title}</strong>
@@ -316,6 +349,17 @@ export function MeetingPage() {
               Rec {formatClock(now - recordFrom)}
             </span>
           )}
+          <div className="layout-switch" role="group" aria-label="Meeting layout" data-testid="room-layout">
+            <button type="button" className={layout === 'gallery' ? 'active' : ''} data-testid="layout-meet" onClick={() => chooseLayout('gallery')}>
+              Meet
+            </button>
+            <button type="button" className={layout === 'speaker' ? 'active' : ''} data-testid="layout-zoom" onClick={() => chooseLayout('speaker')}>
+              Zoom
+            </button>
+            <button type="button" className={layout === 'sidebar' ? 'active' : ''} data-testid="layout-discord" onClick={() => chooseLayout('sidebar')}>
+              Discord
+            </button>
+          </div>
           <label className="style-inline">
             <span>Style</span>
             <select
@@ -346,39 +390,69 @@ export function MeetingPage() {
           </button>
         </div>
       )}
-      <div className="room-body">
+      <div className={`room-body${sidebar ? ' layout-sidebar' : ''}`} style={{ ['--people-size' as string]: `${stripSize}px` }}>
+        <div className="stage-column">
         <div className="stage-wrap">
           {presenting ? (
-            <>
-              <div className="stage" data-testid="screen-stage" data-screen="true">
-                {localSharing ? (
-                  <MediaView stream={session.screenStream} muted fit="contain" recordLabel="Your screen" />
-                ) : sharer ? (
-                  <>
-                    <MediaView stream={sharer.screen} version={sharer.mediaVersion} muted fit="contain" recordLabel={`${sharer.info.name} screen`} speakerId={prefs.speakerId} />
-                    <StreamAudio stream={sharer.screen} version={sharer.mediaVersion} speakerId={prefs.speakerId} />
-                  </>
-                ) : null}
-                <span className="namebar">{localSharing ? 'Your screen' : `${sharer?.info.name ?? 'Guest'} is presenting`}</span>
-              </div>
-              <div className="film">
-                <SelfTile session={session} mirror={prefs.mirror} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
-                {peers.map((peer) => (
-                  <PeerTile key={peer.info.id} peer={peer} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
-                ))}
-              </div>
-            </>
-          ) : layout === 'speaker' ? (
-            <SpeakerLayout session={session} peers={peers} pinned={pinned} onPin={setPinned} mirror={prefs.mirror} speakerId={prefs.speakerId} />
-          ) : (
+            <div className="stage" data-testid="screen-stage" data-screen="true">
+              {localSharing ? (
+                <MediaView stream={session.screenStream} muted fit="contain" recordLabel="Your screen" />
+              ) : sharer ? (
+                <>
+                  <MediaView stream={sharer.screen} version={sharer.mediaVersion} muted fit="contain" recordLabel={`${sharer.info.name} screen`} speakerId={prefs.speakerId} />
+                  <StreamAudio stream={sharer.screen} version={sharer.mediaVersion} speakerId={prefs.speakerId} />
+                </>
+              ) : null}
+              <span className="namebar">{localSharing ? 'Your screen' : `${sharer?.info.name ?? 'Guest'} is presenting`}</span>
+            </div>
+          ) : layout === 'gallery' ? (
             <div className="grid" style={{ ['--cols' as string]: String(columns(peopleCount)) }} data-testid="gallery">
               <SelfTile session={session} mirror={prefs.mirror} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
               {peers.map((peer) => (
                 <PeerTile key={peer.info.id} peer={peer} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
               ))}
             </div>
+          ) : (
+            <div className="stage" data-testid="speaker-stage">
+              {selfOnStage || !focusedPeer ? (
+                <SelfTile session={session} mirror={prefs.mirror} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
+              ) : (
+                <PeerTile peer={focusedPeer} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
+              )}
+            </div>
           )}
         </div>
+        {separatePeople && !sidebar && (
+          <>
+            <button type="button" className="strip-resize" aria-label="Resize people" data-testid="resize-people" onPointerDown={startResize} />
+            <div className="film">
+              {(presenting || !selfOnStage) && (
+                <SelfTile session={session} mirror={prefs.mirror} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
+              )}
+              {peers
+                .filter((peer) => presenting || selfOnStage || peer !== focusedPeer)
+                .map((peer) => (
+                  <PeerTile key={peer.info.id} peer={peer} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
+                ))}
+            </div>
+          </>
+        )}
+      </div>
+      {separatePeople && sidebar && (
+        <>
+          <button type="button" className="strip-resize" aria-label="Resize people" data-testid="resize-people" onPointerDown={startResize} />
+          <div className="people-side">
+            {(presenting || !selfOnStage) && (
+              <SelfTile session={session} mirror={prefs.mirror} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
+            )}
+            {peers
+              .filter((peer) => presenting || selfOnStage || peer !== focusedPeer)
+              .map((peer) => (
+                <PeerTile key={peer.info.id} peer={peer} speakerId={prefs.speakerId} pinned={pinned} onPin={setPinned} />
+              ))}
+          </div>
+        </>
+      )}
         {panel === 'chat' && (
           <aside className="drawer" data-testid="chat-panel">
             <header>
@@ -563,11 +637,14 @@ export function MeetingPage() {
               <button type="button" data-testid="menu-record" onClick={() => void toggleRecord()}>
                 {recording ? 'Stop recording' : 'Record meeting'}
               </button>
-              <button type="button" data-testid="menu-gallery" onClick={() => { setLayout('gallery'); setPanel('none') }}>
-                Gallery view
+              <button type="button" data-testid="menu-gallery" onClick={() => { chooseLayout('gallery'); setPanel('none') }}>
+                Google Meet view
               </button>
-              <button type="button" data-testid="menu-speaker" onClick={() => { setLayout('speaker'); setPanel('none') }}>
-                Speaker view
+              <button type="button" data-testid="menu-speaker" onClick={() => { chooseLayout('speaker'); setPanel('none') }}>
+                Zoom view
+              </button>
+              <button type="button" data-testid="menu-sidebar" onClick={() => { chooseLayout('sidebar'); setPanel('none') }}>
+                Discord view
               </button>
               <button type="button" data-testid="menu-fullscreen" onClick={() => void toggleFullscreen()}>
                 Full screen
@@ -613,11 +690,19 @@ export function MeetingPage() {
             </div>
           )}
         </div>
+        <button className="ctrl" type="button" data-testid="hide-controls" onClick={() => setControlsOn(false)}>
+          <span>Hide</span>
+        </button>
         <button className="ctrl leave" type="button" data-testid="control-leave" onClick={() => setDialog('leave')}>
           <Icon name="leave" />
           <span>Leave</span>
         </button>
       </footer>
+      {!controlsOn && (
+        <button className="controls-show" type="button" data-testid="show-controls" onClick={() => setControlsOn(true)}>
+          Show controls
+        </button>
+      )}
       <div className="toast-stack" aria-live="polite">
         {toasts.map((toast) => (
           <div key={toast.id} className="toast" data-testid="toast">
@@ -709,9 +794,11 @@ export function MeetingPage() {
               onChange={(next) => {
                 setPrefs(next)
                 setLayout(next.layout)
+                if (next.layout === 'sidebar') setStripSize((size) => (size < 140 ? 220 : size))
                 void publishPrefs(next)
               }}
             />
+            <UpdateCard />
             <button className="btn" type="button" onClick={() => setDialog('none')}>
               Done
             </button>
@@ -857,42 +944,6 @@ function TileFrame({
         {connection && connection !== 'connected' && connection !== 'new' && <em>{connection}</em>}
       </span>
     </article>
-  )
-}
-
-function SpeakerLayout({
-  session,
-  peers,
-  pinned,
-  onPin,
-  mirror,
-  speakerId,
-}: {
-  session: RoomSession
-  peers: PeerView[]
-  pinned: string
-  onPin: (id: string) => void
-  mirror: boolean
-  speakerId: string
-}) {
-  const active = peers.find((peer) => peer.info.id === pinned) || peers.find((peer) => peer.info.mic) || peers[0]
-  const rest = peers.filter((peer) => peer !== active)
-  return (
-    <>
-      <div className="stage" data-testid="speaker-stage">
-        {pinned === 'self' || !active ? (
-          <SelfTile session={session} mirror={mirror} speakerId={speakerId} pinned={pinned} onPin={onPin} />
-        ) : (
-          <PeerTile peer={active} speakerId={speakerId} pinned={pinned} onPin={onPin} />
-        )}
-      </div>
-      <div className="film">
-        {pinned !== 'self' && active && <SelfTile session={session} mirror={mirror} speakerId={speakerId} pinned={pinned} onPin={onPin} />}
-        {rest.map((peer) => (
-          <PeerTile key={peer.info.id} peer={peer} speakerId={speakerId} pinned={pinned} onPin={onPin} />
-        ))}
-      </div>
-    </>
   )
 }
 

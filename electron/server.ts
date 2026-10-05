@@ -179,7 +179,7 @@ export function isLoopbackAddress(address: string | undefined): boolean {
 export type HostSettings = {
   fontSize: 'small' | 'medium' | 'large'
   style: 'night' | 'paper' | 'contrast'
-  layout: 'gallery' | 'speaker'
+  layout: 'gallery' | 'speaker' | 'sidebar'
   mirror: boolean
   processing: boolean
   saveData: boolean
@@ -204,7 +204,7 @@ export function normalizeHostSettings(raw: unknown): HostSettings {
   return {
     fontSize: fontSize === 'medium' || fontSize === 'large' ? fontSize : 'small',
     style: style === 'paper' || style === 'contrast' ? style : 'night',
-    layout: layout === 'speaker' ? 'speaker' : 'gallery',
+    layout: layout === 'speaker' || layout === 'sidebar' ? layout : 'gallery',
     mirror: value.mirror !== false,
     processing: value.processing !== false,
     saveData: value.saveData === true,

@@ -110,6 +110,17 @@ test('password, media, chat, reactions, screen share, and recording', async ({ p
   await page.getByTestId('share-choice-screen').click()
   await expect(page.getByTestId('presenting-banner')).toBeVisible()
   await expect(guest.getByTestId('screen-stage')).toBeVisible()
+  const late = await page.context().newPage()
+  await late.goto(path)
+  await joinLobby(late, 'Dana Late', password)
+  await expect(late.getByTestId('screen-stage')).toBeVisible()
+
+  await page.getByTestId('layout-discord').click()
+  await expect(page.getByTestId('resize-people')).toBeVisible()
+  await page.getByTestId('hide-controls').click()
+  await expect(page.getByTestId('control-leave')).toBeHidden()
+  await page.getByTestId('show-controls').click()
+  await expect(page.getByTestId('control-leave')).toBeVisible()
 
   await page.getByTestId('control-more').click()
   await page.getByTestId('menu-record').click()
@@ -131,6 +142,7 @@ test('password, media, chat, reactions, screen share, and recording', async ({ p
   await guest.goto(path)
   await expect(guest.getByTestId('join-error')).toContainText(/ended/i)
   await guest.close()
+  await late.close()
   await stranger.close()
 })
 

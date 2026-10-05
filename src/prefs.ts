@@ -1,6 +1,6 @@
 export type FontSize = 'small' | 'medium' | 'large'
 export type RoomStyle = 'night' | 'paper' | 'contrast'
-export type RoomLayout = 'gallery' | 'speaker'
+export type RoomLayout = 'gallery' | 'speaker' | 'sidebar'
 
 export type Prefs = {
   micId: string
@@ -36,7 +36,7 @@ export const defaultPrefs: Prefs = {
 
 const fontSizes = new Set<FontSize>(['small', 'medium', 'large'])
 const styles = new Set<RoomStyle>(['night', 'paper', 'contrast'])
-const layouts = new Set<RoomLayout>(['gallery', 'speaker'])
+const layouts = new Set<RoomLayout>(['gallery', 'speaker', 'sidebar'])
 
 export function normalizePrefs(value: Partial<Prefs> | null | undefined): Prefs {
   const raw = value || {}

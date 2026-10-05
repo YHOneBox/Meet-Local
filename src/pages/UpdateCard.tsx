@@ -179,12 +179,13 @@ export function UpdateCard() {
       {(!info?.updateAvailable || dismissed) && !downloaded && (
         <div className="version-row">
           <span>Version {version}</span>
+          {!info && !error && <span className="fine">Checking for updates…</span>}
           {info?.currentNotes && (
             <button type="button" data-testid="whats-new" onClick={() => setNotesFor('current')}>
               What’s new
             </button>
           )}
-          {info?.message && <span className="fine">{info.message}</span>}
+          {info?.message && <span className="fine" data-testid="update-status">{info.message}</span>}
           {error && <span className="fine">{error}</span>}
           <button type="button" data-testid="update-check" onClick={() => void scan()} disabled={busy}>
             {busy ? 'Checking…' : 'Check for updates'}

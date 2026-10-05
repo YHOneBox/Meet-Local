@@ -582,6 +582,7 @@ export function HomePage() {
               <h2>Settings</h2>
               <p className="hint">Saved with this app, and used when the meeting opens in your browser.</p>
               <SettingsFields prefs={prefs} onChange={updatePrefs} />
+              <UpdateCard />
             </section>
           )}
       </main>
